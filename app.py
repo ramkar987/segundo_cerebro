@@ -6,10 +6,10 @@ from src.storage import SegundoCerebroStorage
 
 logging.basicConfig(level=logging.INFO)
 
-st.set_page_config(page_title="Segundo Cérebro + Transcriber", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="Segundo Cérebro", page_icon="🧠", layout="wide")
 
 def main():
-    st.title("🧠 Segundo Cérebro + Transcriber")
+    st.title("🧠 Segundo Cérebro")
     st.write("Cole a transcrição aqui e use Groq para resumo, tags, tradução e busca.")
 
     with st.sidebar:
@@ -29,16 +29,6 @@ def main():
     if st.button("Processar") and transcription and groq_api_key:
         groq = GroqAI(api_key=groq_api_key)
         result = groq.process_transcription(transcription, translate_to=translate_to or None)
-
-        st.session_state["result"] = result
-        st.subheader("Resumo")
-        st.write(result["resumo"])
-        st.subheader("Tags")
-        st.write(result["tags"])
-        if result["traducao"]:
-            st.subheader("Tradução")
-            st.write(result["traducao"])
-
         storage = SegundoCerebroStorage(db_path=db_path)
         video_id = storage.insert_video(
             titulo=titulo,
@@ -51,7 +41,15 @@ def main():
             idioma_traducao=result["idioma_traducao"],
         )
         storage.close()
+        st.session_state["result"] = result
         st.success(f"Salvo com ID {video_id}")
+        st.subheader("Resumo")
+        st.write(result["resumo"])
+        st.subheader("Tags")
+        st.write(result["tags"])
+        if result["traducao"]:
+            st.subheader("Tradução")
+            st.write(result["traducao"])
 
     search = st.text_input("Pesquisar")
     if search:
