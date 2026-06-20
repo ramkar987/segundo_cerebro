@@ -26,17 +26,11 @@ class SegundoCerebroStorage:
         )
         """)
 
-    def insert_video(
-        self,
-        titulo: str,
-        caminho: str,
-        transricao: str,
-        resumo: Optional[str] = None,
-        tags: Optional[str] = None,
-        traducao: Optional[str] = None,
-        idioma_original: Optional[str] = None,
-        idioma_traducao: Optional[str] = None,
-    ) -> int:
+    def insert_video(self, titulo: str, caminho: str, transricao: str,
+                     resumo: Optional[str] = None, tags: Optional[str] = None,
+                     traducao: Optional[str] = None,
+                     idioma_original: Optional[str] = None,
+                     idioma_traducao: Optional[str] = None) -> int:
         self.conn.execute("""
             INSERT INTO videos (
                 titulo, caminho, transricao, resumo, tags, traducao,
@@ -58,13 +52,8 @@ class SegundoCerebroStorage:
 
         return [
             {
-                "id": r[0],
-                "titulo": r[1],
-                "caminho": r[2],
-                "resumo": r[3],
-                "tags": r[4],
-                "traducao": r[5],
-                "data_cadastro": r[6],
+                "id": r[0], "titulo": r[1], "caminho": r[2], "resumo": r[3],
+                "tags": r[4], "traducao": r[5], "data_cadastro": r[6]
             }
             for r in rows
         ]
@@ -79,13 +68,8 @@ class SegundoCerebroStorage:
 
         return [
             {
-                "id": r[0],
-                "titulo": r[1],
-                "caminho": r[2],
-                "resumo": r[3],
-                "tags": r[4],
-                "traducao": r[5],
-                "data_cadastro": r[6],
+                "id": r[0], "titulo": r[1], "caminho": r[2], "resumo": r[3],
+                "tags": r[4], "traducao": r[5], "data_cadastro": r[6]
             }
             for r in rows
         ]
