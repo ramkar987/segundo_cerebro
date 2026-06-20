@@ -34,5 +34,5 @@ class GroqAI:
             "tags": tags,
             "traducao": traducao,
             "idioma_original": "pt",
-            "idioma_traducao": translate_to
+            "idioma_traducao": translate_to,
         }
