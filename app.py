@@ -1,4 +1,3 @@
-cat > app.py << 'EOFAPP'
 """
 Streamlit App - Segundo Cérebro + Transcriber
 """
