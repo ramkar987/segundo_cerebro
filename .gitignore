@@ -1,0 +1,14 @@
+# Banco de dados local (suas notas pessoais — não deve ir pro git)
+notas.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Streamlit (caso você crie secrets.toml para chaves de API no futuro)
+.streamlit/secrets.toml
+
+# Sistema
+.DS_Store
