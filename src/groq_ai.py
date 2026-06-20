@@ -1,44 +1,42 @@
-cat > src/groq_ai.py << 'EOF'
-"""Groq AI processor"""
 from typing import Optional, Dict, List
 from groq import Groq
-from config.settings import settings
 
 class GroqAI:
-    def __init__(self, api_key: Optional[str] = None):
-        self.client = Groq(api_key=api_key or settings.groq_api_key)
-        self.model = settings.groq_model
-    
+    def __init__(self, api_key: str, model: str = "llama-3.1-8b-instant"):
+        self.client = Groq(api_key=api_key)
+        self.model = model
+
+    def _chat(self, prompt: str) -> str:
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
+
     def generate_summary(self, text: str) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": f"Resuma: {text}"}]
-        )
-        return response.messages[0].content.strip()
-    
-    def extract_tags(self, text: str) -> List[str]:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": f"Extraia tags: {text}"}]
-        )
-        tags = [t.strip().lower() for t in response.messages[0].content.split(",")]
-        return [t for t in tags if t][:10]
-    
+        prompt = f"Resuma o texto abaixo em português de forma clara e objetiva:\n\n{text}"
+        return self._chat(prompt)
+
+    def extract_tags(self, text: str, max_tags: int = 10) -> List[str]:
+        prompt = f"Extraia até {max_tags} tags curtas e relevantes deste texto. Retorne apenas separadas por vírgula:\n\n{text}"
+        raw = self._chat(prompt)
+        tags = [t.strip().lower() for t in raw.split(",")]
+        return [t for t in tags if t][:max_tags]
+
     def translate(self, text: str, target_lang: str) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": f"Traduza para {target_lang}: {text}"}]
-        )
-        return response.messages[0].content.strip()
-    
+        prompt = f"Traduza o texto para {target_lang}, preservando sentido e contexto:\n\n{text}"
+        return self._chat(prompt)
+
     def process_transcription(self, transcription: str, translate_to: Optional[str] = None) -> Dict:
-        result = {
+        resumo = self.generate_summary(transcription)
+        tags = ", ".join(self.extract_tags(transcription))
+        traducao = self.translate(transcription, translate_to) if translate_to else None
+
+        return {
             "transricao": transcription,
-            "resumo": self.generate_summary(transcription),
-            "tags": ", ".join(self.extract_tags(transcription)),
-            "traducao": self.translate(transcription, translate_to) if translate_to else None,
+            "resumo": resumo,
+            "tags": tags,
+            "traducao": traducao,
             "idioma_original": "pt",
             "idioma_traducao": translate_to
         }
-        return result
-EOF
