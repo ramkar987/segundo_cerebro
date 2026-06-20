@@ -14,24 +14,20 @@ class GroqAI:
         return response.choices[0].message.content.strip()
 
     def generate_summary(self, text: str) -> str:
-        prompt = f"Resuma o texto abaixo em português de forma clara e objetiva:\n\n{text}"
-        return self._chat(prompt)
+        return self._chat(f"Resuma em português de forma objetiva:\n\n{text}")
 
     def extract_tags(self, text: str, max_tags: int = 10) -> List[str]:
-        prompt = f"Extraia até {max_tags} tags curtas e relevantes deste texto. Retorne apenas separadas por vírgula:\n\n{text}"
-        raw = self._chat(prompt)
+        raw = self._chat(f"Extraia até {max_tags} tags curtas separadas por vírgula:\n\n{text}")
         tags = [t.strip().lower() for t in raw.split(",")]
         return [t for t in tags if t][:max_tags]
 
     def translate(self, text: str, target_lang: str) -> str:
-        prompt = f"Traduza o texto para {target_lang}, preservando sentido e contexto:\n\n{text}"
-        return self._chat(prompt)
+        return self._chat(f"Traduza para {target_lang}:\n\n{text}")
 
     def process_transcription(self, transcription: str, translate_to: Optional[str] = None) -> Dict:
         resumo = self.generate_summary(transcription)
         tags = ", ".join(self.extract_tags(transcription))
         traducao = self.translate(transcription, translate_to) if translate_to else None
-
         return {
             "transricao": transcription,
             "resumo": resumo,
