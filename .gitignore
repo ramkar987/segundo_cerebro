@@ -1,14 +1,27 @@
-# Banco de dados local (suas notas pessoais — não deve ir pro git)
-notas.db
-
+cat > .gitignore << 'EOF'
 # Python
 __pycache__/
-*.pyc
-.venv/
+*.py[cod]
+*$py.class
+
+# Ambiente virtual
 venv/
+env/
 
-# Streamlit (caso você crie secrets.toml para chaves de API no futuro)
-.streamlit/secrets.toml
+# Banco de dados
+data/*.duckdb
+*.db
 
-# Sistema
-.DS_Store
+# Variaveis de ambiente
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Arquivos grandes
+*.mp4
+*.avi
+*.mov
+*.mkv
+EOF
