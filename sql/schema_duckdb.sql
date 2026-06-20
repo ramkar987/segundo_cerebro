@@ -1,6 +1,5 @@
-cat > sql/schema_duckdb.sql << 'EOF'
 CREATE TABLE IF NOT EXISTS videos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     titulo TEXT NOT NULL,
     caminho TEXT NOT NULL,
     transricao TEXT,
@@ -12,8 +11,4 @@ CREATE TABLE IF NOT EXISTS videos (
     data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     data_transricao TIMESTAMP,
     data_processamento_ia TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_videos_transricao ON videos(transricao);
-CREATE INDEX IF NOT EXISTS idx_videos_tags ON videos(tags);
-EOF
+)
