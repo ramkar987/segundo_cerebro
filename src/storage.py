@@ -35,10 +35,8 @@ class SegundoCerebroStorage:
             INSERT INTO videos (
                 titulo, caminho, transricao, resumo, tags, traducao,
                 idioma_original, idioma_traducao, data_transricao, data_processamento_ia
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """, [titulo, caminho, transricao, resumo, tags, traducao, idioma_original, idioma_traducao])
-
         return self.conn.execute("SELECT MAX(id) FROM videos").fetchone()[0]
 
     def search_videos(self, search_text: str, limit: int = 50) -> List[Dict]:
@@ -49,30 +47,7 @@ class SegundoCerebroStorage:
             ORDER BY data_cadastro DESC
             LIMIT ?
         """, [f"%{search_text}%", f"%{search_text}%", f"%{search_text}%", f"%{search_text}%", limit]).fetchall()
-
-        return [
-            {
-                "id": r[0], "titulo": r[1], "caminho": r[2], "resumo": r[3],
-                "tags": r[4], "traducao": r[5], "data_cadastro": r[6]
-            }
-            for r in rows
-        ]
-
-    def get_all_videos(self, limit: int = 100) -> List[Dict]:
-        rows = self.conn.execute("""
-            SELECT id, titulo, caminho, resumo, tags, traducao, data_cadastro
-            FROM videos
-            ORDER BY data_cadastro DESC
-            LIMIT ?
-        """, [limit]).fetchall()
-
-        return [
-            {
-                "id": r[0], "titulo": r[1], "caminho": r[2], "resumo": r[3],
-                "tags": r[4], "traducao": r[5], "data_cadastro": r[6]
-            }
-            for r in rows
-        ]
+        return [{"id": r[0], "titulo": r[1], "caminho": r[2], "resumo": r[3], "tags": r[4], "traducao": r[5], "data_cadastro": r[6]} for r in rows]
 
     def close(self):
         self.conn.close()
