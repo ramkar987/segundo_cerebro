@@ -1,3 +1,22 @@
-streamlit
-scikit-learn
-groq
+cat > requirements.txt << 'EOF'
+# Streamlit (interface web)
+streamlit>=1.32.0
+
+# Transcripçª£o de áudio/ví¬´deo
+openai-whisper>=20231106
+ffmpeg-python>=0.2.0
+pydub>=0.25.0
+
+# Groq AI (LLM ultra-fast)
+groq>=0.5.0
+
+# Banco de Dados
+duckdb>=1.0.0
+
+# Utilitó¦´´rios
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+
+# Processamento de texto
+pandas>=2.0.0
+EOF
