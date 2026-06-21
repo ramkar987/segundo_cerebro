@@ -9,7 +9,7 @@ import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 DB_PATH = Path(__file__).parent / "notas.db"
 
@@ -66,6 +66,21 @@ def adicionar_nota(titulo: str, conteudo: str, tags: str = "") -> int:
     nota_id = cur.lastrowid
     conn.close()
     return nota_id
+
+
+def buscar_nota_por_fonte_url(fonte_url: str) -> Optional[Dict]:
+    """Retorna a nota existente com essa fonte_url (vídeo já importado antes),
+    ou None se não houver nenhuma. Usado para evitar importar o mesmo vídeo
+    duas vezes."""
+    if not fonte_url:
+        return None
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM notas WHERE fonte_url = ? ORDER BY criado_em DESC LIMIT 1",
+        (fonte_url,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def adicionar_nota_video(

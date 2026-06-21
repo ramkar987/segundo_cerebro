@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ from db import (
     adicionar_nota,
     adicionar_nota_video,
     atualizar_nota,
+    buscar_nota_por_fonte_url,
     buscar_por_palavra_chave,
     excluir_nota,
     exportar_notas,
@@ -69,6 +71,30 @@ with st.sidebar:
 
 api_key = groq_key or None
 modelo_groq = MODELOS_DISPONIVEIS[modelo_label]
+
+
+def _tem_chave_groq(chave_digitada: str | None) -> bool:
+    """Verifica se há chave da Groq disponível: campo da sidebar, st.secrets ou
+    variável de ambiente. É a mesma ordem de prioridade usada em ai.get_groq_client,
+    só que sem precisar instanciar o cliente (e sem lançar erro)."""
+    if chave_digitada:
+        return True
+    try:
+        if st.secrets.get("GROQ_API_KEY"):
+            return True
+    except Exception:
+        pass
+    return bool(os.environ.get("GROQ_API_KEY"))
+
+
+tem_ia = _tem_chave_groq(api_key)
+
+with st.sidebar:
+    if tem_ia:
+        origem = "campo acima" if api_key else "secrets / variável de ambiente"
+        st.success(f"✅ IA disponível ({origem})")
+    else:
+        st.warning("⚠️ Nenhuma chave da Groq configurada")
 
 # ---------------------------------------------------------------------------
 # Página: Minhas notas (CRUD)
@@ -123,9 +149,21 @@ if pagina == "📝 Minhas notas":
                     st.error(f"Erro ao importar: {e}")
 
     notas = listar_notas()
-    st.caption(f"{len(notas)} nota(s) salva(s)")
+    total_notas = len(notas)
 
-    for nota in notas:
+    POR_PAGINA = 10
+    total_paginas = max(1, (total_notas - 1) // POR_PAGINA + 1) if total_notas else 1
+
+    if "pagina_notas" not in st.session_state:
+        st.session_state.pagina_notas = 1
+    pagina_atual = min(st.session_state.pagina_notas, total_paginas)
+
+    inicio = (pagina_atual - 1) * POR_PAGINA
+    notas_da_pagina = notas[inicio : inicio + POR_PAGINA]
+
+    st.caption(f"{total_notas} nota(s) salva(s) · página {pagina_atual} de {total_paginas}")
+
+    for nota in notas_da_pagina:
         icone = "🎥" if nota.get("tipo") == "video" else "📝"
         rotulo = f"{icone} **{nota['titulo']}**  ·  {nota['tags'] or 'sem tags'}"
         with st.expander(rotulo):
@@ -164,6 +202,19 @@ if pagina == "📝 Minhas notas":
                     st.success("Atualizado!")
                     st.rerun()
 
+    if total_paginas > 1:
+        col_prev, col_info, col_next = st.columns([1, 2, 1])
+        with col_prev:
+            if st.button("⬅️ Anterior", disabled=pagina_atual <= 1):
+                st.session_state.pagina_notas = pagina_atual - 1
+                st.rerun()
+        with col_info:
+            st.markdown(f"<div style='text-align:center'>Página {pagina_atual} de {total_paginas}</div>", unsafe_allow_html=True)
+        with col_next:
+            if st.button("Próxima ➡️", disabled=pagina_atual >= total_paginas):
+                st.session_state.pagina_notas = pagina_atual + 1
+                st.rerun()
+
 # ---------------------------------------------------------------------------
 # Página: Importar vídeo (baixa, transcreve local, resume/tageia com IA)
 # ---------------------------------------------------------------------------
@@ -174,7 +225,7 @@ elif pagina == "🎥 Importar vídeo":
         "transcrito localmente com Whisper; o resumo, as tags e a tradução usam a IA da Groq."
     )
 
-    if not api_key:
+    if not tem_ia:
         st.info(
             "Essa página precisa de uma chave da Groq (resumo e tags usam IA). "
             "Adicione na barra lateral, ou configure GROQ_API_KEY em secrets.toml / "
@@ -182,6 +233,12 @@ elif pagina == "🎥 Importar vídeo":
         )
 
     url = st.text_input("URL do vídeo", placeholder="https://youtube.com/watch?v=...")
+
+    nota_existente = buscar_nota_por_fonte_url(url.strip()) if url.strip() else None
+    forcar_reimportacao = False
+    if nota_existente:
+        st.warning(f'⚠️ Esse vídeo já foi importado como a nota "{nota_existente["titulo"]}".')
+        forcar_reimportacao = st.checkbox("Importar mesmo assim (cria uma nota nova e duplicada)")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -191,7 +248,12 @@ elif pagina == "🎥 Importar vídeo":
         gerar_traducao = st.checkbox("Também gerar tradução")
         idioma_traducao = st.text_input("Traduzir para", value="inglês", disabled=not gerar_traducao)
 
-    processar = st.button("▶️ Processar e salvar como nota", type="primary", disabled=not api_key)
+    bloqueado_por_duplicado = bool(nota_existente) and not forcar_reimportacao
+    processar = st.button(
+        "▶️ Processar e salvar como nota",
+        type="primary",
+        disabled=not tem_ia or bloqueado_por_duplicado,
+    )
 
     if processar:
         if not url.strip():
@@ -295,7 +357,7 @@ elif pagina == "🔍 Buscar":
 elif pagina == "💬 Perguntar à IA":
     st.header("Pergunte às suas notas")
 
-    if not api_key:
+    if not tem_ia:
         st.info(
             "Adicione sua chave da Groq na barra lateral (ou configure GROQ_API_KEY em "
             "secrets.toml / variável de ambiente) para usar essa funcionalidade. "
