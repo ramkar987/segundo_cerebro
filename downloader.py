@@ -64,7 +64,12 @@ def _classificar_erro(exc: Exception) -> DownloadError:
 
 def extract_metadata(url: str) -> MediaMetadata:
     """Busca metadados do vídeo sem baixar o arquivo."""
-    ydl_opts = {"quiet": True, "no_warnings": True, "skip_download": True}
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+    }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -89,35 +94,54 @@ def extract_metadata(url: str) -> MediaMetadata:
     )
 
 
+# O YouTube vem bloqueando downloads automatizados de forma inconsistente
+# (HTTP 403 mesmo em vídeos públicos), e clientes diferentes são afetados de
+# forma diferente. Tentamos alguns em sequência antes de desistir.
+_TENTATIVAS_PLAYER_CLIENT = [
+    ["android"],
+    ["ios"],
+    ["web"],
+    ["android", "web"],
+]
+
+
 def download_audio(url: str, audio_dir: Path) -> tuple[Path, MediaMetadata]:
-    """Baixa o áudio do vídeo como .mp3 e retorna (caminho_do_arquivo, metadados)."""
+    """Baixa o áudio do vídeo como .mp3 e retorna (caminho_do_arquivo, metadados).
+
+    Tenta múltiplos "player clients" do YouTube em sequência, porque o
+    bloqueio anti-bot do YouTube tem sido inconsistente entre eles — um
+    cliente que falha agora pode funcionar daqui a pouco, e vice-versa."""
     metadata = extract_metadata(url)
 
     audio_dir.parent.mkdir(parents=True, exist_ok=True)
     output_template = str(audio_dir) + ".%(ext)s"
-
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": output_template,
-        "quiet": True,
-        "no_warnings": True,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "128",
-            }
-        ],
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-    except yt_dlp.utils.DownloadError as exc:
-        raise _classificar_erro(exc) from exc
-
     audio_path = Path(str(audio_dir) + ".mp3")
-    if not audio_path.exists():
-        raise DownloadError("O áudio foi processado, mas o arquivo final não foi encontrado.")
 
-    return audio_path, metadata
+    ultimo_erro: DownloadError = DownloadError("Falha ao baixar o áudio.")
+
+    for clientes in _TENTATIVAS_PLAYER_CLIENT:
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": output_template,
+            "quiet": True,
+            "no_warnings": True,
+            "extractor_args": {"youtube": {"player_client": clientes}},
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "128",
+                }
+            ],
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            if audio_path.exists():
+                return audio_path, metadata
+            ultimo_erro = DownloadError("O áudio foi processado, mas o arquivo final não foi encontrado.")
+        except yt_dlp.utils.DownloadError as exc:
+            ultimo_erro = _classificar_erro(exc)
+            continue
+
+    raise ultimo_erro
