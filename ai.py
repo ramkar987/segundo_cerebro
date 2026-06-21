@@ -10,6 +10,7 @@ A chave da Groq pode vir de três lugares, nessa ordem de prioridade:
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Dict, List, Optional
 
@@ -120,6 +121,91 @@ def generate_tags(
     resposta = _chat(client, system_prompt, user_prompt, model)
     tags = [t.strip().lower() for t in resposta.split(",") if t.strip()]
     return tags[:max_tags]
+
+
+def analisar_video(
+    transcript_text: str,
+    model: str = "llama-3.3-70b-versatile",
+    api_key: Optional[str] = None,
+) -> Dict:
+    """Analisa a transcrição de um vídeo numa única chamada e devolve resumo,
+    takeaways, tags e uma pergunta de pesquisa futura como JSON estruturado —
+    substitui a combinação summarize_transcript() + generate_tags() no fluxo
+    de importação de vídeo, evitando uma segunda chamada redundante à API e
+    parsing frágil de texto livre."""
+    client = get_groq_client(api_key)
+
+    system_prompt = (
+        "Você é um assistente especializado em analisar transcrições de vídeos do "
+        "Instagram e YouTube para um 'Segundo Cérebro' pessoal. Seja factual e objetivo, "
+        "não invente fatos, e responda sempre em português do Brasil. Se houver pouca "
+        "informação na transcrição, sinalize isso nos campos relevantes em vez de "
+        "inventar conteúdo.\n\n"
+        "Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois, "
+        "exatamente neste formato:\n"
+        "{\n"
+        '  "resumo": ["bullet com até 25 palavras, começando com verbo de ação", "..."],\n'
+        '  "takeaways": [{"insight": "...", "motivo": "por que isso importa"}],\n'
+        '  "tags": ["tag1", "tag2", "..."],\n'
+        '  "pergunta_futura": "uma pergunta para investigar depois"\n'
+        "}\n\n"
+        "'resumo' deve ter exatamente 5 itens. 'takeaways' deve ter de 3 a 5 itens. "
+        "'tags' deve ter de 10 a 15 tags curtas, em minúsculas, sem hashtag (#)."
+    )
+    user_prompt = f"TRANSCRIÇÃO:\n{transcript_text}"
+
+    resposta = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.2,
+        response_format={"type": "json_object"},
+    )
+    bruto = (resposta.choices[0].message.content or "").strip()
+
+    try:
+        dados = json.loads(bruto)
+    except json.JSONDecodeError as exc:
+        raise AIServiceError(f"A IA não devolveu um JSON válido: {exc}") from exc
+
+    tags = [
+        t.strip().lower().lstrip("#")
+        for t in dados.get("tags", [])
+        if isinstance(t, str) and t.strip()
+    ]
+
+    return {
+        "resumo": dados.get("resumo", []),
+        "takeaways": dados.get("takeaways", []),
+        "tags": tags,
+        "pergunta_futura": dados.get("pergunta_futura", ""),
+    }
+
+
+def formatar_analise_markdown(analise: Dict) -> str:
+    """Formata o resultado de analisar_video() como markdown legível, pronto
+    para virar o conteúdo da nota."""
+    partes = ["## Resumo"]
+    partes += [f"- {item}" for item in analise.get("resumo", [])]
+
+    takeaways = analise.get("takeaways", [])
+    if takeaways:
+        partes.append("\n## Takeaways")
+        for t in takeaways:
+            if isinstance(t, dict):
+                insight = t.get("insight", "")
+                motivo = t.get("motivo", "")
+                partes.append(f"- **{insight}** — {motivo}" if motivo else f"- {insight}")
+            else:
+                partes.append(f"- {t}")
+
+    pergunta = analise.get("pergunta_futura", "")
+    if pergunta:
+        partes.append(f"\n## Para investigar depois\n{pergunta}")
+
+    return "\n".join(partes)
 
 
 def montar_contexto(notas: List[Dict]) -> str:

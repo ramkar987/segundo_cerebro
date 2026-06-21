@@ -10,9 +10,9 @@ import streamlit as st
 from ai import (
     MODELOS_DISPONIVEIS,
     AIServiceError,
-    generate_tags,
+    analisar_video,
+    formatar_analise_markdown,
     perguntar_as_notas,
-    summarize_transcript,
     translate_transcript,
 )
 from db import (
@@ -281,11 +281,10 @@ elif pagina == "🎥 Importar vídeo":
                         )
                         transcript_text = "\n".join(seg.text for seg in segments)
 
-                        st.write("📝 Gerando resumo com IA...")
-                        resumo = summarize_transcript(transcript_text, model=modelo_groq, api_key=api_key)
-
-                        st.write("🏷️ Gerando tags com IA...")
-                        tags = generate_tags(resumo, api_key=api_key)
+                        st.write("📝 Analisando vídeo com IA (resumo, takeaways e tags)...")
+                        analise = analisar_video(transcript_text, model=modelo_groq, api_key=api_key)
+                        resumo_md = formatar_analise_markdown(analise)
+                        tags = analise["tags"]
 
                         traducao = ""
                         if gerar_traducao:
@@ -294,7 +293,7 @@ elif pagina == "🎥 Importar vídeo":
                                 transcript_text, idioma_traducao, model=modelo_groq, api_key=api_key
                             )
 
-                        conteudo_nota = f"**Fonte:** {url.strip()}\n\n## Resumo\n{resumo}"
+                        conteudo_nota = f"**Fonte:** {url.strip()}\n\n{resumo_md}"
                         if traducao:
                             conteudo_nota += f"\n\n## Tradução ({idioma_traducao})\n{traducao}"
 
@@ -310,7 +309,7 @@ elif pagina == "🎥 Importar vídeo":
 
                 st.success(f'Nota "{metadata.title}" salva! Tags: {", ".join(tags)}')
                 with st.expander("📄 Ver resumo gerado"):
-                    st.markdown(resumo)
+                    st.markdown(resumo_md)
 
             except UnsupportedURLError as exc:
                 st.error(f"🚫 URL inválida ou não suportada: {exc}")
