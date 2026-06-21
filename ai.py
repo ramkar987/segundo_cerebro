@@ -4,7 +4,7 @@ responder perguntas com base nas notas (RAG simples, sem banco vetorial).
 
 A chave da Groq pode vir de três lugares, nessa ordem de prioridade:
 1. Passada diretamente na chamada (ex: o campo da barra lateral do app)
-2. st.secrets["GROQ_API_KEY"]  (forma recomendada em deploy no Streamlit Cloud)
+2. st.secrets["GROQ_API_KEY"] (forma recomendada em deploy no Streamlit Cloud)
 3. variável de ambiente GROQ_API_KEY (rodando local)
 """
 
@@ -33,13 +33,16 @@ def get_groq_client(api_key: Optional[str] = None) -> Groq:
             api_key = st.secrets.get("GROQ_API_KEY")
         except Exception:
             api_key = None
+
     if not api_key:
         api_key = os.environ.get("GROQ_API_KEY")
+
     if not api_key:
         raise AIServiceError(
             "Nenhuma chave da Groq configurada (nem na barra lateral, nem em "
             "secrets.toml, nem na variável de ambiente GROQ_API_KEY)."
         )
+
     return Groq(api_key=api_key)
 
 
@@ -62,11 +65,23 @@ def summarize_transcript(
 ) -> str:
     """Gera um resumo curto e objetivo da transcrição."""
     client = get_groq_client(api_key)
-    system_prompt = "Você é um assistente que resume transcrições em português com clareza e objetividade."
+    system_prompt = (
+        "Você é um assistente que resume transcrições em português com clareza e objetividade. "
+        "Você também deve gerar tags e estrutura para um segundo cérebro."
+    )
     user_prompt = (
-        "Resuma o conteúdo abaixo em português do Brasil, em 5 a 8 bullets curtos. "
-        "Não invente fatos. Mantenha apenas os pontos principais:\n\n"
-        f"{transcript_text}"
+        "Você vai analisar uma transcrição de vídeo do Instagram ou YouTube.\n\n"
+        "Regras:\n"
+        "- Responda em português do Brasil.\n"
+        "- Não invente fatos.\n"
+        "- Seja objetivo e útil para um segundo cérebro.\n"
+        "- Se houver pouca informação, sinalize isso com clareza.\n\n"
+        "Formato obrigatório:\n"
+        "1. RESUMO: 5 bullets curtos, cada um com no máximo 25 palavras.\n"
+        "2. TAKEAWAYS: 3 a 5 itens com a estrutura 'Insight | Por que importa'.\n"
+        "3. TAGS: 10 a 15 tags separadas por vírgula, em minúsculas, sem hashtags.\n"
+        "4. PERGUNTA FUTURA: 1 pergunta para pesquisa posterior.\n\n"
+        f"TRANSCRIÇÃO:\n{transcript_text}"
     )
     return _chat(client, system_prompt, user_prompt, model)
 
@@ -94,8 +109,7 @@ def generate_tags(
     api_key: Optional[str] = None,
     max_tags: int = 6,
 ) -> List[str]:
-    """Gera tags curtas a partir de um texto — idealmente o resumo, não a
-    transcrição crua inteira, para ser mais rápido e mais barato."""
+    """Gera tags curtas a partir de um texto — idealmente o resumo, não a transcrição crua inteira, para ser mais rápido e mais barato."""
     client = get_groq_client(api_key)
     system_prompt = (
         "Você gera tags curtas (1 a 2 palavras cada) em português para organizar notas "
@@ -129,5 +143,6 @@ def perguntar_as_notas(
         "português, de forma direta, e cite o título da nota usada entre colchetes, "
         "por exemplo: [Nome da nota]."
     )
+
     user_prompt = f"NOTAS:\n{contexto}\n\nPERGUNTA: {pergunta}"
     return _chat(client, system_prompt, user_prompt, model)
