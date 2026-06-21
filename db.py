@@ -5,10 +5,11 @@ guardar as notas do usuário — tanto notas manuais quanto notas geradas
 a partir de vídeos importados e transcritos.
 """
 
+import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 DB_PATH = Path(__file__).parent / "notas.db"
 
@@ -125,3 +126,65 @@ def buscar_por_palavra_chave(termo: str) -> List[Dict]:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def exportar_notas() -> str:
+    """Gera um backup em JSON de todas as notas (para baixar e guardar fora do app)."""
+    notas = listar_notas()
+    notas_export = [
+        {
+            "titulo": n["titulo"],
+            "conteudo": n["conteudo"],
+            "tags": n["tags"],
+            "criado_em": n["criado_em"],
+            "atualizado_em": n["atualizado_em"],
+            "tipo": n.get("tipo", "manual"),
+            "fonte_url": n.get("fonte_url", ""),
+            "transcricao_completa": n.get("transcricao_completa", ""),
+        }
+        for n in notas
+    ]
+    return json.dumps({"versao": 1, "notas": notas_export}, ensure_ascii=False, indent=2)
+
+
+def importar_notas(conteudo_json: str) -> Tuple[int, int]:
+    """Importa notas de um backup JSON gerado por exportar_notas().
+
+    Evita duplicar notas que já existem (mesmo título + mesma data de
+    criação). Retorna (quantidade_importada, quantidade_ignorada)."""
+    dados = json.loads(conteudo_json)
+    notas_para_importar = dados.get("notas", []) if isinstance(dados, dict) else dados
+
+    existentes = {(n["titulo"], n["criado_em"]) for n in listar_notas()}
+
+    conn = get_connection()
+    importadas = 0
+    ignoradas = 0
+    for nota in notas_para_importar:
+        chave = (nota.get("titulo", ""), nota.get("criado_em", ""))
+        if chave in existentes:
+            ignoradas += 1
+            continue
+
+        agora = datetime.now().isoformat()
+        conn.execute(
+            "INSERT INTO notas "
+            "(titulo, conteudo, tags, criado_em, atualizado_em, tipo, fonte_url, transcricao_completa) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                nota.get("titulo", "Sem título"),
+                nota.get("conteudo", ""),
+                nota.get("tags", ""),
+                nota.get("criado_em") or agora,
+                nota.get("atualizado_em") or agora,
+                nota.get("tipo", "manual"),
+                nota.get("fonte_url", ""),
+                nota.get("transcricao_completa", ""),
+            ),
+        )
+        importadas += 1
+        existentes.add(chave)
+
+    conn.commit()
+    conn.close()
+    return importadas, ignoradas

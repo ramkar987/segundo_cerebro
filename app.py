@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -19,6 +20,8 @@ from db import (
     atualizar_nota,
     buscar_por_palavra_chave,
     excluir_nota,
+    exportar_notas,
+    importar_notas,
     init_db,
     listar_notas,
 )
@@ -86,6 +89,38 @@ if pagina == "📝 Minhas notas":
                     st.rerun()
                 else:
                     st.warning("Preencha pelo menos o título e o conteúdo.")
+
+    with st.expander("💾 Backup (exportar / importar)"):
+        st.caption(
+            "No Streamlit Cloud, as notas podem ser perdidas quando o app reinicia "
+            "(dorme por inatividade, novo deploy, reboot manual). Exporte um backup "
+            "de vez em quando e importe de volta se isso acontecer."
+        )
+
+        col_exp, col_imp = st.columns(2)
+
+        with col_exp:
+            notas_atuais = listar_notas()
+            if notas_atuais:
+                st.download_button(
+                    "📥 Exportar notas (.json)",
+                    data=exportar_notas(),
+                    file_name=f"segundo_cerebro_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                    mime="application/json",
+                )
+            else:
+                st.caption("Nenhuma nota para exportar ainda.")
+
+        with col_imp:
+            arquivo_backup = st.file_uploader("📤 Importar backup (.json)", type="json", key="upload_backup")
+            if arquivo_backup is not None and st.button("Confirmar importação"):
+                try:
+                    conteudo_backup = arquivo_backup.read().decode("utf-8")
+                    importadas, ignoradas = importar_notas(conteudo_backup)
+                    st.success(f"{importadas} nota(s) importada(s), {ignoradas} ignorada(s) (já existiam).")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao importar: {e}")
 
     notas = listar_notas()
     st.caption(f"{len(notas)} nota(s) salva(s)")
