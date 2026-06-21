@@ -1,0 +1,5 @@
+streamlit
+scikit-learn
+groq
+yt-dlp
+openai-whisper
