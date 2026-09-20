@@ -54,12 +54,14 @@ REGRAS DE CONFIABILIDADE:
 - Não apresente alegações sobre gratuidade, preços, elegibilidade, benefícios, disponibilidade, segurança ou regras de serviços como fatos confirmados.
 - summary deve usar formulações como "O conteúdo apresenta...", "O autor afirma..." ou equivalentes quando houver alegações não verificadas.
 - claims_to_verify deve conter apenas alegações concretas feitas pela fonte que fariam diferença prática e deveriam ser verificadas antes de agir.
-- insights deve conter apenas conclusões diretamente sustentadas pelo material; NÃO acrescente riscos, conselhos, implicações legais, segurança, ética ou termos de serviço se isso não estiver explicitamente no material.
+- insights deve conter apenas ideias gerais, procedimentos ou aprendizados diretamente sustentados pelo material; NÃO use insights para repetir alegações que exigem verificação, especialmente gratuidade, preço, elegibilidade, prazo, benefício ou disponibilidade. Essas alegações pertencem SOMENTE a claims_to_verify.
+- NÃO acrescente riscos, conselhos, implicações legais, segurança, ética ou termos de serviço se isso não estiver explicitamente no material.
 - Para CADA insight e claim_to_verify forneça evidence: um pequeno trecho LITERAL copiado de caption, transcript ou content que sustente aquele ponto.
 - Se não houver um trecho literal que sustente o ponto, NÃO inclua o ponto.
 - why_keep é meta-organização: explique por que vale manter o item, sem validar a veracidade das alegações.
 
 ORGANIZAÇÃO:
+- Escolha a categoria MAIS ESPECÍFICA entre as categorias amplas disponíveis. Se o conteúdo for principalmente sobre ferramentas, modelos, serviços ou uso de IA, use "Inteligência Artificial", e não "Tecnologia".
 - topic DEVE ser exatamente uma destas categorias:
   Inteligência Artificial, Tecnologia, Programação, Dados, Finanças, Saúde, Educação, Trabalho, Produtividade, Jurídico, Viagens, Casa, Veículos, Família, Entretenimento, Outros.
 - subtopic deve ser curto, específico e reutilizável, com 1 a 4 palavras. Ex.: "Benefícios educacionais".
