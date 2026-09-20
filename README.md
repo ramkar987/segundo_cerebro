@@ -56,12 +56,26 @@ A ideia é reduzir o atrito entre **“vi algo interessante”** e **“isso ent
 ### Biblioteca
 
 - busca textual;
+- **busca semântica por significado**, usando Gemini Embedding 2;
+- embeddings de 768 dimensões armazenados nos chunks no SQLite;
+- novos itens são indexados automaticamente ao concluir o processamento;
 - filtros por tipo;
 - filtros por status;
 - filtro de favoritos;
 - acesso ao material original;
 - retorno à fonte original;
 - cards recentes com status atualizado enquanto o processamento acontece.
+
+### Pergunte ao Segundo Cérebro
+
+- tela própria para perguntas sobre o acervo;
+- recuperação dos trechos mais relevantes por busca semântica;
+- resposta gerada pelo Groq/GPT-OSS usando somente os trechos recuperados;
+- referências numeradas na resposta;
+- fontes clicáveis com o trecho exato utilizado;
+- timestamps preservados para transcrições;
+- slides identificados quando o trecho veio de carrossel;
+- se o acervo não sustentar a resposta, o sistema deve indicar que não encontrou suporte suficiente.
 
 ### Relações e conexões
 
@@ -265,6 +279,30 @@ Instagram imagem / carrossel
 
 No OCR de carrosséis, os slides são enviados individualmente. Isso reduz o impacto de rate limits e permite preservar resultados parciais quando apenas um slide falha.
 
+## Indexação semântica inicial
+
+Novas capturas são indexadas automaticamente ao concluir o processamento.
+
+Para conteúdos que já estavam na biblioteca antes da busca semântica existir, execute uma vez:
+
+```bash
+python manage.py index_semantic
+```
+
+Para um item específico:
+
+```bash
+python manage.py index_semantic --item 3
+```
+
+Para recriar embeddings:
+
+```bash
+python manage.py index_semantic --force
+```
+
+A configuração padrão usa `gemini-embedding-2` com 768 dimensões. O banco continua sendo SQLite; a similaridade é calculada localmente nesta fase.
+
 ## Comandos úteis
 
 Transcrever mídias já cadastradas:
@@ -297,6 +335,24 @@ Item específico:
 python manage.py analyze_content --item 3
 ```
 
+## Limites atuais
+
+| Recurso | Limite/configuração padrão |
+| --- | ---: |
+| Captura em lote | 100 links por envio |
+| URL armazenada | 2.000 caracteres |
+| Título manual | 300 caracteres |
+| Conteúdo extraído de página web | 200.000 caracteres |
+| Timeout de download de página web | 20 s |
+| Áudio enviado para transcrição | 24 MB |
+| Imagens/slides de carrossel analisados | 20 |
+| Tamanho máximo por imagem para OCR | 15 MB |
+| Timeout geral de IA | 120 s |
+| Timeout da transcrição Groq | 180 s |
+| PDF/documentos | ainda não implementados |
+
+Vídeos não possuem hoje um limite próprio de duração. O limite prático da transcrição é aplicado ao arquivo de áudio baixado: acima de 24 MB, a transcrição é pulada e o restante da captura continua quando possível.
+
 ## PostgreSQL + pgvector
 
 Para subir somente o banco local:
@@ -324,6 +380,9 @@ Django
    ├── Captura universal
    ├── Captura em lote
    ├── Biblioteca
+   │    ├── busca textual
+   │    └── busca semântica
+   ├── Perguntar / RAG
    ├── Item detalhado
    └── Conexões
         ↓
@@ -341,6 +400,10 @@ Worker process_jobs
    │    └── Requests + BeautifulSoup
    ├── Análise textual
    │    └── Groq Chat
+   ├── Embeddings / busca semântica
+   │    └── Gemini Embedding 2
+   ├── RAG
+   │    └── recuperação semântica + Groq Chat
    └── Descoberta de relações
 ```
 
@@ -357,14 +420,13 @@ O banco, mídia e `.env` ficam fora do Git através do `.gitignore`.
 
 ## Próximos marcos
 
-1. Grafo interativo de conexões.
-2. Chunking também de legenda, páginas web e PDFs.
-3. Embeddings e busca híbrida.
-4. Busca semântica.
-5. RAG com citação de trecho exato.
-6. Upload e parsing de PDF/documentos.
-7. Melhorias de histórico, manutenção e reprocessamento em lote.
-8. Deploy gratuito ou de baixo custo.
+1. Upload e parsing de PDF/documentos.
+2. Grafo interativo de conexões.
+3. Busca híbrida aprimorada (texto + semântica em um único ranking).
+4. Migração opcional da busca vetorial para PostgreSQL + pgvector quando o acervo justificar.
+5. Citações ainda mais profundas, com navegação direta para timestamp/página/slide.
+6. Melhorias de histórico, manutenção e reprocessamento em lote.
+7. Deploy gratuito ou de baixo custo.
 
 ## Segurança
 
