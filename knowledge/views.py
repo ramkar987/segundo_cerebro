@@ -77,10 +77,14 @@ def item_detail(request, pk):
         pk=pk,
     )
 
-    relations = Relation.objects.filter(
-        Q(source=item) | Q(target=item),
-        status__in=[Relation.Status.CONFIRMED, Relation.Status.SUGGESTED],
-    ).select_related('source', 'target')[:30]
+    relations = (
+        Relation.objects.filter(
+            Q(source=item) | Q(target=item),
+            status__in=[Relation.Status.CONFIRMED, Relation.Status.SUGGESTED],
+        )
+        .select_related('source', 'target')
+        .order_by('status', '-confidence', '-created_at')[:30]
+    )
 
     show_content = bool(item.content.strip())
     if (
@@ -104,6 +108,28 @@ def toggle_favorite(request, pk):
     item.save(update_fields=['favorite', 'updated_at'])
     return HttpResponseRedirect(
         request.META.get('HTTP_REFERER') or item.get_absolute_url()
+    )
+
+
+@require_POST
+def confirm_relation(request, pk):
+    relation = get_object_or_404(Relation, pk=pk)
+    relation.status = Relation.Status.CONFIRMED
+    relation.save(update_fields=['status'])
+    messages.success(request, 'Relação confirmada.')
+    return HttpResponseRedirect(
+        request.META.get('HTTP_REFERER') or relation.source.get_absolute_url()
+    )
+
+
+@require_POST
+def reject_relation(request, pk):
+    relation = get_object_or_404(Relation, pk=pk)
+    relation.status = Relation.Status.REJECTED
+    relation.save(update_fields=['status'])
+    messages.info(request, 'Sugestão de relação rejeitada.')
+    return HttpResponseRedirect(
+        request.META.get('HTTP_REFERER') or relation.source.get_absolute_url()
     )
 
 
