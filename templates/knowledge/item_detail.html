@@ -24,9 +24,68 @@
 
   {% if item.summary %}
     <section class="detail-section">
-      <p class="eyebrow">RESUMO</p>
+      <p class="eyebrow">ESSÊNCIA</p>
       <div class="prose">{{ item.summary|linebreaks }}</div>
+
+      <div class="card-meta">
+        {% for topic in item.topics.all %}
+          <span class="badge">Assunto: {{ topic.name }}</span>
+        {% endfor %}
+        {% for tag in item.tags.all %}
+          <span class="badge">{{ tag.name }}</span>
+        {% endfor %}
+      </div>
     </section>
+  {% endif %}
+
+  {% if item.analysis %}
+    {% if item.analysis.video_explains or item.analysis.caption_adds or item.analysis.common_points %}
+      <section class="detail-section">
+        <p class="eyebrow">ANÁLISE DA IA</p>
+        <div class="grid">
+          {% if item.analysis.video_explains %}
+            <div class="item-card">
+              <h3>🎙 O vídeo explica</h3>
+              <ul>
+                {% for point in item.analysis.video_explains %}<li>{{ point }}</li>{% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+
+          {% if item.analysis.caption_adds %}
+            <div class="item-card">
+              <h3>📝 A legenda acrescenta</h3>
+              <ul>
+                {% for point in item.analysis.caption_adds %}<li>{{ point }}</li>{% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+
+          {% if item.analysis.common_points %}
+            <div class="item-card">
+              <h3>↔ Em comum</h3>
+              <ul>
+                {% for point in item.analysis.common_points %}<li>{{ point }}</li>{% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% if item.analysis.insights or item.analysis.why_keep %}
+      <section class="detail-section">
+        <p class="eyebrow">O QUE VALE GUARDAR</p>
+        {% if item.analysis.insights %}
+          <ul class="prose">
+            {% for point in item.analysis.insights %}<li>{{ point }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+        {% if item.analysis.why_keep %}
+          <p><strong>Por que guardar:</strong> {{ item.analysis.why_keep }}</p>
+        {% endif %}
+      </section>
+    {% endif %}
   {% endif %}
 
   {% if show_content %}
