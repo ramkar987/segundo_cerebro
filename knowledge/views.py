@@ -167,8 +167,26 @@ def reject_relation(request, pk):
 
 
 def connections(request):
-    relations = (
+    confirmed = (
         Relation.objects.filter(status=Relation.Status.CONFIRMED)
-        .select_related('source', 'target')[:250]
+        .select_related('source', 'target')
+        .order_by('-created_at')[:250]
     )
-    return render(request, 'knowledge/connections.html', {'relations': relations})
+    suggested = (
+        Relation.objects.filter(status=Relation.Status.SUGGESTED)
+        .select_related('source', 'target')
+        .order_by('-confidence', '-created_at')[:100]
+    )
+    analyzed_items = Item.objects.exclude(analysis={}).count()
+
+    return render(
+        request,
+        'knowledge/connections.html',
+        {
+            'confirmed_relations': confirmed,
+            'suggested_relations': suggested,
+            'analyzed_items': analyzed_items,
+            'confirmed_count': confirmed.count(),
+            'suggested_count': suggested.count(),
+        },
+    )
