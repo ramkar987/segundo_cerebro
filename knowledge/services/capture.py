@@ -16,10 +16,15 @@ def _existing_url_item(kind: str, normalized: str):
     if exact:
         return exact
 
-    # Compatibilidade com capturas antigas do Instagram que ainda guardavam
-    # parâmetros de compartilhamento.
-    if kind == 'instagram':
-        return Item.objects.filter(source_url__startswith=normalized).first()
+    # Compatibilidade com itens antigos, antes da normalização atual.
+    # A biblioteca pessoal é pequena; este fallback só roda quando o match
+    # exato não encontrou nada.
+    for candidate in Item.objects.exclude(source_url='').only('id', 'source_url'):
+        try:
+            if detect_capture(candidate.source_url).normalized == normalized:
+                return candidate
+        except Exception:
+            continue
 
     return None
 
