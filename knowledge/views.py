@@ -6,10 +6,15 @@ from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from .forms import BatchCaptureForm, CaptureForm
-from .models import Item, ProcessingJob, Relation
+from .forms import AskLibraryForm, BatchCaptureForm, CaptureForm
+from .models import Chunk, Item, ProcessingJob, Relation
 from .services.capture import DuplicateCapture, create_capture
 from .services.detector import detect_capture
+from .services.rag import RagUnavailable, answer_from_library
+from .services.semantic import (
+    SemanticSearchUnavailable,
+    semantic_item_results,
+)
 
 
 def home(request):
@@ -161,7 +166,7 @@ def home(request):
 
 
 def library(request):
-    items = (
+    base_items = (
         Item.objects.all()
         .select_related('source')
         .prefetch_related('tags', 'topics', 'projects')
@@ -170,30 +175,53 @@ def library(request):
     item_type = request.GET.get('type', '').strip()
     status = request.GET.get('status', '').strip()
     favorite = request.GET.get('favorite', '').strip()
-
-    if q:
-        items = items.filter(
-            Q(title__icontains=q)
-            | Q(content__icontains=q)
-            | Q(summary__icontains=q)
-            | Q(source_author__icontains=q)
-            | Q(source__caption__icontains=q)
-            | Q(source__description__icontains=q)
-            | Q(source__transcript__icontains=q)
-            | Q(tags__name__icontains=q)
-            | Q(topics__name__icontains=q)
-            | Q(projects__name__icontains=q)
-        ).distinct()
+    search_mode = request.GET.get('search_mode', 'text').strip()
+    if search_mode not in {'text', 'semantic'}:
+        search_mode = 'text'
 
     if item_type in Item.Type.values:
-        items = items.filter(type=item_type)
+        base_items = base_items.filter(type=item_type)
     if status in Item.Status.values:
-        items = items.filter(status=status)
+        base_items = base_items.filter(status=status)
     if favorite == '1':
-        items = items.filter(favorite=True)
+        base_items = base_items.filter(favorite=True)
+
+    semantic_results = []
+    semantic_error = ''
+
+    if q and search_mode == 'semantic':
+        allowed_ids = set(base_items.values_list('id', flat=True))
+        try:
+            semantic_results = semantic_item_results(
+                q,
+                item_ids=allowed_ids,
+                max_items=100,
+            )
+        except SemanticSearchUnavailable as exc:
+            semantic_error = str(exc)
+        items = []
+    else:
+        items = base_items
+        if q:
+            items = items.filter(
+                Q(title__icontains=q)
+                | Q(content__icontains=q)
+                | Q(summary__icontains=q)
+                | Q(source_author__icontains=q)
+                | Q(source__caption__icontains=q)
+                | Q(source__description__icontains=q)
+                | Q(source__transcript__icontains=q)
+                | Q(tags__name__icontains=q)
+                | Q(topics__name__icontains=q)
+                | Q(projects__name__icontains=q)
+            ).distinct()
+        items = items[:100]
 
     context = {
-        'items': items[:100],
+        'items': items,
+        'semantic_results': semantic_results,
+        'semantic_error': semantic_error,
+        'search_mode': search_mode,
         'q': q,
         'selected_type': item_type,
         'selected_status': status,
@@ -202,6 +230,40 @@ def library(request):
         'status_choices': Item.Status.choices,
     }
     return render(request, 'knowledge/library.html', context)
+
+
+def ask_library(request):
+    form = AskLibraryForm(request.POST or None)
+    result = None
+    rag_error = ''
+
+    if request.method == 'POST' and form.is_valid():
+        try:
+            result = answer_from_library(form.cleaned_data['question'])
+        except RagUnavailable as exc:
+            rag_error = str(exc)
+        except Exception as exc:
+            rag_error = f'Não foi possível consultar o acervo: {exc}'
+
+    indexed_chunks = Chunk.objects.exclude(embedding=[]).count()
+    indexed_items = (
+        Chunk.objects.exclude(embedding=[])
+        .values('item_id')
+        .distinct()
+        .count()
+    )
+
+    return render(
+        request,
+        'knowledge/ask.html',
+        {
+            'form': form,
+            'result': result,
+            'rag_error': rag_error,
+            'indexed_chunks': indexed_chunks,
+            'indexed_items': indexed_items,
+        },
+    )
 
 
 def item_detail(request, pk):
