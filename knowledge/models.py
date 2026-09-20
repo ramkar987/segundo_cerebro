@@ -56,6 +56,8 @@ class Item(models.Model):
     content = models.TextField(blank=True)
     summary = models.TextField(blank=True)
     analysis = models.JSONField(default=dict, blank=True)
+    processing_progress = models.PositiveSmallIntegerField(default=100)
+    processing_stage = models.CharField(max_length=160, blank=True)
     source_url = models.URLField(max_length=2000, blank=True, db_index=True)
     source_author = models.CharField(max_length=200, blank=True)
     source_date = models.DateTimeField(null=True, blank=True)
