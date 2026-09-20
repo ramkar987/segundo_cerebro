@@ -21,7 +21,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         qs = Item.objects.select_related('source').exclude(
-            status=Item.Status.ERROR
+            status__in=[
+                Item.Status.ERROR,
+                Item.Status.PROCESSING,
+            ]
         )
 
         if options['item']:
