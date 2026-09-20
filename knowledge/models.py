@@ -55,6 +55,7 @@ class Item(models.Model):
     title = models.CharField(max_length=300, blank=True)
     content = models.TextField(blank=True)
     summary = models.TextField(blank=True)
+    analysis = models.JSONField(default=dict, blank=True)
     source_url = models.URLField(max_length=2000, blank=True, db_index=True)
     source_author = models.CharField(max_length=200, blank=True)
     source_date = models.DateTimeField(null=True, blank=True)
@@ -161,6 +162,10 @@ class Relation(models.Model):
 
 
 class ProcessingJob(models.Model):
+    class Kind(models.TextChoices):
+        EXTRACT = 'extract', 'Extrair/processar fonte'
+        ANALYZE = 'analyze', 'Analisar com IA'
+
     class State(models.TextChoices):
         PENDING = 'pending', 'Aguardando'
         RUNNING = 'running', 'Processando'
@@ -168,6 +173,7 @@ class ProcessingJob(models.Model):
         ERROR = 'error', 'Erro'
 
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='jobs')
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.EXTRACT, db_index=True)
     state = models.CharField(max_length=20, choices=State.choices, default=State.PENDING, db_index=True)
     attempts = models.PositiveIntegerField(default=0)
     error = models.TextField(blank=True)
