@@ -1,24 +1,37 @@
 from django.contrib import messages
 from django.db.models import Q
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .forms import CaptureForm
 from .models import Item, Relation
-from .services.capture import create_capture
+from .services.capture import DuplicateCapture, create_capture
 
 
 def home(request):
     form = CaptureForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        item = create_capture(form.cleaned_data['capture'], form.cleaned_data['title'])
-        if item.status == Item.Status.PROCESSED:
-            messages.success(request, 'Conteúdo já está no Segundo Cérebro.')
-        elif item.jobs.filter(state='pending').exists():
-            messages.success(request, 'Captura recebida. Ela entrou na fila de processamento.')
+        try:
+            item = create_capture(
+                form.cleaned_data['capture'],
+                form.cleaned_data['title'],
+            )
+        except DuplicateCapture as duplicate:
+            item = duplicate.item
+            messages.warning(
+                request,
+                'Este conteúdo já foi guardado. Abrindo o item existente.',
+            )
+            return redirect(item)
+
+        if item.status == Item.Status.PROCESSING:
+            messages.success(
+                request,
+                'Captura recebida. O processamento começou.',
+            )
         else:
-            messages.info(request, 'Esse conteúdo já havia sido capturado.')
+            messages.success(request, 'Conteúdo guardado no Segundo Cérebro.')
         return redirect(item)
 
     recent = Item.objects.all()[:8]
@@ -99,6 +112,26 @@ def item_detail(request, pk):
         'knowledge/item_detail.html',
         {'item': item, 'relations': relations, 'show_content': show_content},
     )
+
+
+def item_progress(request, pk):
+    item = get_object_or_404(Item, pk=pk)
+    last_error = (
+        item.jobs.filter(state='error')
+        .order_by('-finished_at', '-id')
+        .values_list('error', flat=True)
+        .first()
+        or ''
+    )
+    return JsonResponse({
+        'id': item.id,
+        'status': item.status,
+        'status_label': item.get_status_display(),
+        'progress': item.processing_progress,
+        'stage': item.processing_stage,
+        'done': item.processing_progress >= 100,
+        'error': last_error[:500] if item.status == Item.Status.ERROR else '',
+    })
 
 
 @require_POST
