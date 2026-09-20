@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Capturar · Segundo Cérebro{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">CAPTURA UNIVERSAL</p>
+  <h1>O que você quer guardar?</h1>
+  <p class="muted">Cole um Instagram, YouTube, página web ou escreva uma nota. O sistema identifica a origem.</p>
+  <form method="post" class="capture-card">
+    {% csrf_token %}
+    {{ form.capture }}
+    <div class="capture-footer">
+      {{ form.title }}
+      <button class="primary" type="submit">Guardar</button>
+    </div>
+    {% if form.errors %}<div class="errors">{{ form.errors }}</div>{% endif %}
+  </form>
+</section>
+<section class="section-head">
+  <div><p class="eyebrow">RECENTES</p><h2>Últimas capturas</h2></div>
+  <a href="{% url 'library' %}">Ver biblioteca →</a>
+</section>
+<div class="grid">
+  {% for item in recent %}
+  <a class="item-card" href="{{ item.get_absolute_url }}">
+    <div class="card-meta"><span class="badge">{{ item.get_type_display }}</span><span>{{ item.get_status_display }}</span></div>
+    <h3>{{ item.title|default:'Sem título' }}</h3>
+    <p>{{ item.summary|default:item.content|truncatechars:150 }}</p>
+  </a>
+  {% empty %}
+  <div class="empty">Seu Segundo Cérebro ainda está vazio. A primeira captura aparece aqui.</div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Segundo Cérebro{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{% url 'home' %}">🧠 Segundo Cérebro</a>
+    <nav>
+      <a href="{% url 'home' %}">Capturar</a>
+      <a href="{% url 'library' %}">Biblioteca</a>
+      <a href="{% url 'connections' %}">Conexões</a>
+      <a href="/admin/">Admin</a>
+    </nav>
+  </header>
+  <main class="container">
+    {% if messages %}
+      {% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}Conexões · Segundo Cérebro{% endblock %}
+{% block content %}
+<div class="section-head"><div><p class="eyebrow">CONEXÕES</p><h1>Veja como seu conhecimento se relaciona</h1></div></div>
+<p class="muted">Esta primeira tela já expõe as relações confirmadas. O grafo interativo entra no próximo marco, usando os mesmos dados.</p>
+<div class="relations big">
+{% for relation in relations %}
+  <div class="relation-row"><a href="{{ relation.source.get_absolute_url }}">{{ relation.source.title }}</a><span>{{ relation.get_relation_type_display }}</span><a href="{{ relation.target.get_absolute_url }}">{{ relation.target.title }}</a></div>
+{% empty %}<div class="empty">Nenhuma relação confirmada ainda.</div>{% endfor %}
+</div>
+{% endblock %}
