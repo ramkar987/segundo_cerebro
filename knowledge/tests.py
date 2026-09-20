@@ -1,9 +1,13 @@
+from unittest.mock import Mock, patch
+
 from django.test import TestCase, override_settings
 
 from .forms import BatchCaptureForm
-from .models import Item, ProcessingJob
+from .models import Chunk, Item, ItemSource, ProcessingJob
 from .services.capture import DuplicateCapture, create_capture
 from .services.detector import detect_capture
+from .services.rag import answer_from_library
+from .services.semantic import SemanticHit, build_chunks, semantic_search, split_text
 
 
 class DetectorTests(TestCase):
@@ -187,3 +191,122 @@ class BatchCaptureViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, '/')
         self.assertEqual(Item.objects.count(), 1)
+
+
+
+class SemanticSearchTests(TestCase):
+    def setUp(self):
+        self.item = Item.objects.create(
+            type=Item.Type.NOTE,
+            title='Experimento com cinco dólares',
+            content=(
+                'Uma professora entregou cinco dólares para grupos e propôs '
+                'que encontrassem maneiras de gerar valor em pouco tempo.'
+            ),
+            status=Item.Status.PROCESSED,
+        )
+        ItemSource.objects.create(
+            item=self.item,
+            platform='manual',
+            metadata={},
+        )
+
+    def test_split_text_respects_reasonable_chunk_size(self):
+        text = ('Primeira frase. ' * 80) + '\n\n' + ('Segunda frase. ' * 80)
+        chunks = split_text(text, max_chars=300)
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(len(chunk) <= 340 for chunk in chunks))
+
+    def test_build_chunks_uses_original_note_content(self):
+        chunks = build_chunks(self.item)
+        self.assertGreaterEqual(len(chunks), 1)
+        self.assertEqual(chunks[0].kind, Chunk.Kind.CONTENT)
+        self.assertIn('cinco dólares', chunks[0].text)
+
+    @patch(
+        'knowledge.services.semantic.embed_query',
+        return_value=[1.0, 0.0],
+    )
+    def test_semantic_search_orders_by_cosine_similarity(self, _mock_embed):
+        first = Chunk.objects.create(
+            item=self.item,
+            kind=Chunk.Kind.CONTENT,
+            text='mais próximo',
+            position=0,
+            embedding=[1.0, 0.0],
+        )
+        other_item = Item.objects.create(
+            type=Item.Type.NOTE,
+            title='Outro',
+            content='Outro conteúdo',
+            status=Item.Status.PROCESSED,
+        )
+        ItemSource.objects.create(
+            item=other_item,
+            platform='manual',
+            metadata={},
+        )
+        Chunk.objects.create(
+            item=other_item,
+            kind=Chunk.Kind.CONTENT,
+            text='menos próximo',
+            position=0,
+            embedding=[0.0, 1.0],
+        )
+
+        with override_settings(SEMANTIC_MIN_SCORE=-1.0, SEMANTIC_TOP_K=10):
+            hits = semantic_search('consulta')
+
+        self.assertEqual(hits[0].chunk.pk, first.pk)
+        self.assertGreater(hits[0].score, hits[1].score)
+
+
+class RagTests(TestCase):
+    @override_settings(
+        GROQ_API_KEY='test-key',
+        GROQ_CHAT_MODEL='test-model',
+        RAG_TOP_K=8,
+        RAG_MAX_CHUNKS_PER_ITEM=3,
+        AI_TIMEOUT=5,
+    )
+    @patch('knowledge.services.rag.requests.post')
+    @patch('knowledge.services.rag.semantic_search')
+    def test_rag_returns_answer_with_source(
+        self,
+        mock_search,
+        mock_post,
+    ):
+        item = Item.objects.create(
+            type=Item.Type.NOTE,
+            title='Minha nota',
+            content='Conteúdo de teste',
+            status=Item.Status.PROCESSED,
+        )
+        ItemSource.objects.create(item=item, platform='manual', metadata={})
+        chunk = Chunk.objects.create(
+            item=item,
+            kind=Chunk.Kind.CONTENT,
+            text='O trecho exato que sustenta a resposta.',
+            position=0,
+            embedding=[1.0, 0.0],
+        )
+        mock_search.return_value = [SemanticHit(chunk=chunk, score=0.9)]
+
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {
+            'choices': [
+                {
+                    'message': {
+                        'content': 'Resposta baseada no acervo [1].'
+                    }
+                }
+            ]
+        }
+        mock_post.return_value = response
+
+        result = answer_from_library('O que eu guardei?')
+
+        self.assertIn('[1]', result['answer'])
+        self.assertEqual(len(result['sources']), 1)
+        self.assertEqual(result['sources'][0]['item'].pk, item.pk)
