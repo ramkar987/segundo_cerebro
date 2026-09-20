@@ -90,3 +90,9 @@ GROQ_WHISPER_MODEL = os.getenv('GROQ_WHISPER_MODEL', 'whisper-large-v3-turbo').s
 TRANSCRIBE_MEDIA = os.getenv('TRANSCRIBE_MEDIA', '1') == '1'
 TRANSCRIPTION_LANGUAGE = os.getenv('TRANSCRIPTION_LANGUAGE', 'pt').strip() or 'pt'
 MAX_TRANSCRIPTION_BYTES = int(os.getenv('MAX_TRANSCRIPTION_BYTES', str(24 * 1024 * 1024)))
+
+
+# Análise textual com IA. Usa a mesma GROQ_API_KEY da transcrição.
+GROQ_CHAT_MODEL = os.getenv('GROQ_CHAT_MODEL', 'openai/gpt-oss-20b').strip()
+ANALYZE_CONTENT = os.getenv('ANALYZE_CONTENT', '1') == '1'
+AI_TIMEOUT = int(os.getenv('AI_TIMEOUT', '120'))
