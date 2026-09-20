@@ -123,3 +123,21 @@ input,select,button,.button-link,.capture-card textarea{
   border-color:var(--accent);
   background:var(--accent-soft);
 }
+
+.capture-hint{
+  margin:8px 4px 2px;
+  padding:9px 11px;
+  border-radius:9px;
+  font-size:13px;
+  font-weight:700;
+}
+.capture-hint.link-detected{
+  background:var(--accent-soft);
+  color:var(--badge-text);
+  border:1px solid var(--line);
+}
+.capture-hint.link-warning{
+  background:var(--warning-bg);
+  color:var(--warning-text);
+  border:1px solid var(--warning-line);
+}
