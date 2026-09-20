@@ -16,6 +16,7 @@ chmod +x "$SCRIPT_DIR"/*.sh
 create_launcher() {
     local name="$1"
     local script="$2"
+    local terminal="$3"
     local file="$DESKTOP_DIR/$name.desktop"
 
     cat > "$file" <<EOF
@@ -24,7 +25,7 @@ Type=Application
 Name=$name
 Comment=Segundo Cerebro
 Exec=bash "$SCRIPT_DIR/$script"
-Terminal=true
+Terminal=$terminal
 Icon=applications-internet
 Categories=Utility;
 EOF
@@ -33,9 +34,9 @@ EOF
     echo "Criado: $file"
 }
 
-create_launcher "Segundo Cerebro" "iniciar_segundo_cerebro.sh"
-create_launcher "Backup Segundo Cerebro" "backup_segundo_cerebro.sh"
-create_launcher "Restaurar Segundo Cerebro" "restaurar_segundo_cerebro.sh"
+create_launcher "Segundo Cerebro" "iniciar_segundo_cerebro.sh" "false"
+create_launcher "Backup Segundo Cerebro" "backup_segundo_cerebro.sh" "true"
+create_launcher "Restaurar Segundo Cerebro" "restaurar_segundo_cerebro.sh" "true"
 
 echo
 echo "Atalhos instalados na Area de Trabalho."
