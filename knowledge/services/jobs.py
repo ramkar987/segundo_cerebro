@@ -21,19 +21,27 @@ def claim_next_job():
         return job
 
 
+def _short_title(text: str, limit: int = 82) -> str:
+    clean = ' '.join((text or '').split()).strip()
+    if len(clean) <= limit:
+        return clean
+    cut = clean[:limit + 1].rsplit(' ', 1)[0].rstrip(' ,.;:-')
+    return (cut or clean[:limit]).rstrip() + '…'
+
+
 def _useful_instagram_title(raw_title: str, caption: str) -> str:
     title = (raw_title or '').strip()
     generic = title.lower().startswith('video by ') or title.lower().startswith('photo by ')
 
     if title and not generic:
-        return title
+        return _short_title(title)
 
     for line in (caption or '').splitlines():
         candidate = ' '.join(line.split()).strip()
         if candidate and not candidate.startswith('#') and candidate != '.':
-            return candidate[:120]
+            return _short_title(candidate)
 
-    return title or 'Instagram'
+    return 'Instagram'
 
 
 def process_job(job: ProcessingJob):
