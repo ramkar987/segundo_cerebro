@@ -65,7 +65,10 @@ if (Get-Command wt.exe -ErrorAction SilentlyContinue) {
         "-Command", $WorkerCommand
     )
 
-    Start-Process wt.exe -ArgumentList $wtArgs
+    # Chamada direta preserva corretamente argumentos com espaços.
+    # Start-Process recompõe ArgumentList em uma string e pode quebrar
+    # títulos/comandos do Windows Terminal.
+    & wt.exe @wtArgs
 } else {
     Write-Host "Windows Terminal nao encontrado. Abrindo duas janelas do PowerShell..." -ForegroundColor Yellow
 
