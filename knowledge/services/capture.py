@@ -41,6 +41,7 @@ def create_capture(raw: str, title: str = '') -> Item:
                 status=Item.Status.PROCESSED,
             )
             ItemSource.objects.create(item=item, platform='manual')
+            ProcessingJob.objects.create(item=item, kind=ProcessingJob.Kind.ANALYZE)
         else:
             item = Item.objects.create(
                 type=item_type,
@@ -49,5 +50,5 @@ def create_capture(raw: str, title: str = '') -> Item:
                 status=Item.Status.PROCESSING,
             )
             ItemSource.objects.create(item=item, platform=detection.kind)
-            ProcessingJob.objects.create(item=item)
+            ProcessingJob.objects.create(item=item, kind=ProcessingJob.Kind.EXTRACT)
     return item
