@@ -119,13 +119,18 @@
 
 <div class="grid">
   {% for item in recent %}
-  <a class="item-card" href="{{ item.get_absolute_url }}">
+  <a
+    class="item-card recent-item-card"
+    href="{{ item.get_absolute_url }}"
+    data-item-id="{{ item.pk }}"
+    data-progress-url="{% url 'item_progress' item.pk %}"
+  >
     <div class="card-meta">
-      <span class="badge">{{ item.get_type_display }}</span>
-      <span>{{ item.get_status_display }}</span>
+      <span class="badge recent-type">{{ item.get_type_display }}</span>
+      <span class="recent-status">{{ item.get_status_display }}</span>
     </div>
-    <h3>{{ item.title|default:'Sem título' }}</h3>
-    <p>{{ item.summary|default:item.content|truncatechars:150 }}</p>
+    <h3 class="recent-title">{{ item.title|default:'Sem título' }}</h3>
+    <p class="recent-summary">{{ item.summary|default:item.content|truncatechars:150 }}</p>
   </a>
   {% empty %}
   <div class="empty">Seu Segundo Cérebro ainda está vazio. A primeira captura aparece aqui.</div>
@@ -219,6 +224,26 @@
             if (title) title.textContent = data.title || 'Sem título';
             if (type) type.textContent = data.type_label || type.textContent;
 
+            const recentCard = document.querySelector(
+              '.recent-item-card[data-item-id="' + data.id + '"]'
+            );
+            if (recentCard) {
+              const recentStatus = recentCard.querySelector('.recent-status');
+              const recentTitle = recentCard.querySelector('.recent-title');
+              const recentSummary = recentCard.querySelector('.recent-summary');
+              const recentType = recentCard.querySelector('.recent-type');
+
+              if (recentStatus) recentStatus.textContent = data.status_label;
+              if (recentTitle) recentTitle.textContent = data.title || 'Sem título';
+              if (recentType) recentType.textContent = data.type_label || recentType.textContent;
+              if (recentSummary && data.summary) {
+                recentSummary.textContent =
+                  data.summary.length > 150
+                    ? data.summary.slice(0, 147) + '…'
+                    : data.summary;
+              }
+            }
+
             card.classList.toggle('done', data.done && data.status !== 'error');
             card.classList.toggle('failed', data.status === 'error');
 
@@ -244,6 +269,49 @@
 
       setTimeout(pollBatch, 700);
     }
+
+    const standaloneRecent = Array.from(
+      document.querySelectorAll('.recent-item-card[data-progress-url]')
+    ).filter(card => {
+      const status = card.querySelector('.recent-status');
+      return status && status.textContent.trim() === 'Processando';
+    });
+
+    standaloneRecent.forEach((card) => {
+      const pollRecent = async () => {
+        try {
+          const response = await fetch(card.dataset.progressUrl, {
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+            cache: 'no-store'
+          });
+          if (!response.ok) throw new Error('Falha ao consultar item');
+
+          const data = await response.json();
+          const status = card.querySelector('.recent-status');
+          const title = card.querySelector('.recent-title');
+          const summary = card.querySelector('.recent-summary');
+          const type = card.querySelector('.recent-type');
+
+          if (status) status.textContent = data.status_label;
+          if (title) title.textContent = data.title || 'Sem título';
+          if (type) type.textContent = data.type_label || type.textContent;
+          if (summary && data.summary) {
+            summary.textContent =
+              data.summary.length > 150
+                ? data.summary.slice(0, 147) + '…'
+                : data.summary;
+          }
+
+          if (!data.done) {
+            setTimeout(pollRecent, 2000);
+          }
+        } catch (error) {
+          setTimeout(pollRecent, 3000);
+        }
+      };
+
+      setTimeout(pollRecent, 900);
+    });
   })();
 </script>
 {% endblock %}
