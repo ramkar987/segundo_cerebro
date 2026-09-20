@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% load timecode %}
+{% block title %}Perguntar · Segundo Cérebro{% endblock %}
+{% block content %}
+<section class="ask-page">
+  <div class="section-head ask-head">
+    <div>
+      <p class="eyebrow">PERGUNTE AO SEU ACERVO</p>
+      <h1>Converse com o que você já guardou</h1>
+      <p class="muted">
+        A resposta usa somente trechos recuperados do seu Segundo Cérebro e mostra as fontes utilizadas.
+      </p>
+    </div>
+  </div>
+
+  <form method="post" class="ask-card">
+    {% csrf_token %}
+    {{ form.question }}
+    {% if form.errors %}<div class="errors">{{ form.errors }}</div>{% endif %}
+    <div class="ask-footer">
+      <span class="muted">
+        {{ indexed_items }} item(ns) · {{ indexed_chunks }} trecho(s) indexado(s)
+      </span>
+      <button type="submit" class="primary">Perguntar</button>
+    </div>
+  </form>
+
+  {% if indexed_chunks == 0 %}
+    <div class="message warning ask-index-warning">
+      O acervo ainda não tem embeddings. Depois de atualizar o projeto, faça a indexação inicial para habilitar as respostas sobre conteúdos antigos.
+    </div>
+  {% endif %}
+
+  {% if rag_error %}
+    <div class="message error">{{ rag_error }}</div>
+  {% endif %}
+
+  {% if result %}
+    <section class="detail-section rag-answer">
+      <p class="eyebrow">RESPOSTA</p>
+      <div class="prose rag-answer-text">{{ result.answer|linebreaks }}</div>
+    </section>
+
+    <section class="detail-section rag-sources-section">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">FONTES DO ACERVO</p>
+          <h2>Trechos usados para responder</h2>
+        </div>
+      </div>
+
+      <div class="rag-sources">
+        {% for source in result.sources %}
+          <article class="rag-source-card">
+            <div class="rag-source-head">
+              <span class="rag-source-number">[{{ source.number }}]</span>
+              <div>
+                <a href="{{ source.item.get_absolute_url }}">
+                  <strong>{{ source.item.title|default:'Sem título' }}</strong>
+                </a>
+                <div class="card-meta">
+                  <span class="badge">{{ source.item.get_type_display }}</span>
+                  <span>{{ source.locator }}</span>
+                </div>
+              </div>
+            </div>
+            <blockquote>{{ source.excerpt }}</blockquote>
+          </article>
+        {% empty %}
+          <div class="empty">A resposta não encontrou fontes suficientes.</div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+</section>
+{% endblock %}
