@@ -4,26 +4,79 @@
 <article>
   <div class="detail-head">
     <div>
-      <div class="card-meta"><span class="badge">{{ item.get_type_display }}</span><span>{{ item.get_status_display }}</span>{% if item.source_author %}<span>por {{ item.source_author }}</span>{% endif %}</div>
+      <div class="card-meta">
+        <span class="badge">{{ item.get_type_display }}</span>
+        <span>{{ item.get_status_display }}</span>
+        {% if item.source_author %}<span>por {{ item.source_author }}</span>{% endif %}
+      </div>
       <h1>{{ item.title|default:'Sem título' }}</h1>
     </div>
-    <form method="post" action="{% url 'toggle_favorite' item.pk %}">{% csrf_token %}<button class="icon-button">{% if item.favorite %}★ Favorito{% else %}☆ Favoritar{% endif %}</button></form>
+    <form method="post" action="{% url 'toggle_favorite' item.pk %}">
+      {% csrf_token %}
+      <button class="icon-button">{% if item.favorite %}★ Favorito{% else %}☆ Favoritar{% endif %}</button>
+    </form>
   </div>
-  {% if item.source_url %}<p><a href="{{ item.source_url }}" target="_blank" rel="noopener">Abrir fonte original ↗</a></p>{% endif %}
 
-  {% if item.summary %}<section class="detail-section"><p class="eyebrow">RESUMO</p><div class="prose">{{ item.summary|linebreaks }}</div></section>{% endif %}
-  {% if item.content %}<section class="detail-section"><p class="eyebrow">CONTEÚDO</p><div class="prose">{{ item.content|linebreaks }}</div></section>{% endif %}
+  {% if item.source_url %}
+    <p><a href="{{ item.source_url }}" target="_blank" rel="noopener">Abrir fonte original ↗</a></p>
+  {% endif %}
 
-  {% if item.source.caption and item.type == 'instagram' %}<section class="detail-section"><p class="eyebrow">LEGENDA DO INSTAGRAM</p><div class="prose">{{ item.source.caption|linebreaks }}</div></section>{% endif %}
-  {% if item.source.transcript %}<section class="detail-section"><p class="eyebrow">TRANSCRIÇÃO</p><div class="prose">{{ item.source.transcript|linebreaks }}</div></section>{% endif %}
+  {% if item.summary %}
+    <section class="detail-section">
+      <p class="eyebrow">RESUMO</p>
+      <div class="prose">{{ item.summary|linebreaks }}</div>
+    </section>
+  {% endif %}
+
+  {% if show_content %}
+    <section class="detail-section">
+      <p class="eyebrow">CONTEÚDO</p>
+      <div class="prose">{{ item.content|linebreaks }}</div>
+    </section>
+  {% endif %}
+
+  {% if item.source.caption and item.type == 'instagram' %}
+    <section class="detail-section">
+      <p class="eyebrow">LEGENDA DO INSTAGRAM</p>
+      <div class="prose">{{ item.source.caption|linebreaks }}</div>
+    </section>
+  {% endif %}
+
+  {% if item.source.original_hashtags %}
+    <section class="detail-section">
+      <p class="eyebrow">HASHTAGS ORIGINAIS</p>
+      <div class="card-meta">
+        {% for tag in item.source.original_hashtags %}
+          <span class="badge">#{{ tag }}</span>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if item.source.transcript %}
+    <section class="detail-section">
+      <p class="eyebrow">TRANSCRIÇÃO</p>
+      <div class="prose">{{ item.source.transcript|linebreaks }}</div>
+    </section>
+  {% endif %}
 
   <section class="detail-section">
-    <div class="section-head"><div><p class="eyebrow">RELAÇÕES</p><h2>Conteúdos relacionados</h2></div></div>
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">RELAÇÕES</p>
+        <h2>Conteúdos relacionados</h2>
+      </div>
+    </div>
     <div class="relations">
-    {% for relation in relations %}
-      {% if relation.source_id == item.id %}<a href="{{ relation.target.get_absolute_url }}">{{ relation.get_relation_type_display }} → {{ relation.target.title }}</a>
-      {% else %}<a href="{{ relation.source.get_absolute_url }}">{{ relation.source.title }} → {{ relation.get_relation_type_display }}</a>{% endif %}
-    {% empty %}<p class="muted">Ainda não há relações. Elas serão sugeridas quando ativarmos o motor semântico.</p>{% endfor %}
+      {% for relation in relations %}
+        {% if relation.source_id == item.id %}
+          <a href="{{ relation.target.get_absolute_url }}">{{ relation.get_relation_type_display }} → {{ relation.target.title }}</a>
+        {% else %}
+          <a href="{{ relation.source.get_absolute_url }}">{{ relation.source.title }} → {{ relation.get_relation_type_display }}</a>
+        {% endif %}
+      {% empty %}
+        <p class="muted">Ainda não há relações. Elas serão sugeridas quando ativarmos o motor semântico.</p>
+      {% endfor %}
     </div>
   </section>
 </article>
