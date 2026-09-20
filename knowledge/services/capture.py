@@ -29,7 +29,12 @@ def _existing_url_item(kind: str, normalized: str):
     return None
 
 
-def create_capture(raw: str, title: str = '') -> Item:
+def create_capture(
+    raw: str,
+    title: str = '',
+    capture_mode: str = 'individual',
+    batch_id: str = '',
+) -> Item:
     detection = detect_capture(raw)
     kind_to_type = {
         'note': Item.Type.NOTE,
@@ -55,7 +60,14 @@ def create_capture(raw: str, title: str = '') -> Item:
                 processing_progress=70 if should_analyze else 100,
                 processing_stage='Aguardando análise da IA' if should_analyze else 'Concluído',
             )
-            ItemSource.objects.create(item=item, platform='manual')
+            metadata = {'capture_mode': capture_mode}
+            if batch_id:
+                metadata['batch_id'] = batch_id
+            ItemSource.objects.create(
+                item=item,
+                platform='manual',
+                metadata=metadata,
+            )
             if should_analyze:
                 ProcessingJob.objects.create(item=item, kind=ProcessingJob.Kind.ANALYZE)
         else:
@@ -67,6 +79,13 @@ def create_capture(raw: str, title: str = '') -> Item:
                 processing_progress=5,
                 processing_stage='Na fila',
             )
-            ItemSource.objects.create(item=item, platform=detection.kind)
+            metadata = {'capture_mode': capture_mode}
+            if batch_id:
+                metadata['batch_id'] = batch_id
+            ItemSource.objects.create(
+                item=item,
+                platform=detection.kind,
+                metadata=metadata,
+            )
             ProcessingJob.objects.create(item=item, kind=ProcessingJob.Kind.EXTRACT)
     return item
