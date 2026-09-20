@@ -129,6 +129,8 @@ GROQ_WHISPER_MODEL=whisper-large-v3-turbo
 TRANSCRIBE_MEDIA=1
 TRANSCRIPTION_LANGUAGE=pt
 GROQ_VISION_MODEL=qwen/qwen3.8-27b
+GEMINI_API_KEY=sua-chave-do-google-ai-studio
+GEMINI_VISION_MODEL=gemini-3.5-flash-lite
 ANALYZE_IMAGES=1
 GROQ_CHAT_MODEL=openai/gpt-oss-20b
 ANALYZE_CONTENT=1
@@ -136,7 +138,7 @@ ANALYZE_CONTENT=1
 
 Novas capturas de vídeo do Instagram/YouTube serão transcritas automaticamente pelo worker.
 
-Posts e carrosséis de imagens do Instagram usam Instaloader para obter os slides e o modelo visual da Groq para extrair o texto visível. Legenda e texto dos slides permanecem separados para a análise.
+Posts e carrosséis de imagens do Instagram usam Instaloader para obter os slides. O OCR visual tenta primeiro a Groq; se houver limite/erro e uma GEMINI_API_KEY estiver configurada, usa automaticamente o Gemini 3.5 Flash-Lite como contingência. Legenda e texto dos slides permanecem separados para a análise.
 
 Para completar mídias que já estavam cadastradas antes da transcrição existir:
 
