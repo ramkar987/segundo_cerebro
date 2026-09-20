@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import time
 from dataclasses import dataclass
 
 import requests
@@ -259,24 +260,45 @@ def _embedding_headers() -> dict:
     }
 
 
+def _post_embedding(payload: dict, batch: bool = False):
+    response = None
+    for attempt in range(4):
+        response = requests.post(
+            _embedding_endpoint(batch=batch),
+            headers=_embedding_headers(),
+            json=payload,
+            timeout=settings.AI_TIMEOUT,
+        )
+
+        if response.status_code not in {429, 500, 502, 503, 504}:
+            return response
+        if attempt >= 3:
+            return response
+
+        retry_after = response.headers.get('Retry-After')
+        try:
+            wait_seconds = float(retry_after) if retry_after else (2 ** attempt) * 3
+        except (TypeError, ValueError):
+            wait_seconds = (2 ** attempt) * 3
+
+        time.sleep(max(2.0, min(wait_seconds, 45.0)))
+
+    return response
+
+
 def embed_query(text: str) -> list[float]:
     query = _clean_text(text)
     if not query:
         raise SemanticSearchUnavailable('Consulta vazia.')
 
-    response = requests.post(
-        _embedding_endpoint(),
-        headers=_embedding_headers(),
-        json={
-            'model': f'models/{settings.GEMINI_EMBEDDING_MODEL}',
-            'content': {'parts': [{'text': query}]},
-            'embedContentConfig': {
-                'taskType': 'RETRIEVAL_QUERY',
-                'outputDimensionality': settings.EMBEDDING_DIMENSIONS,
-            },
+    response = _post_embedding({
+        'model': f'models/{settings.GEMINI_EMBEDDING_MODEL}',
+        'content': {'parts': [{'text': query}]},
+        'embedContentConfig': {
+            'taskType': 'RETRIEVAL_QUERY',
+            'outputDimensionality': settings.EMBEDDING_DIMENSIONS,
         },
-        timeout=settings.AI_TIMEOUT,
-    )
+    })
 
     if response.status_code >= 400:
         raise SemanticSearchUnavailable(
@@ -311,11 +333,9 @@ def _embed_documents(chunks: list[Chunk], title: str) -> list[list[float]]:
                 },
             })
 
-        response = requests.post(
-            _embedding_endpoint(batch=True),
-            headers=_embedding_headers(),
-            json={'requests': requests_payload},
-            timeout=settings.AI_TIMEOUT,
+        response = _post_embedding(
+            {'requests': requests_payload},
+            batch=True,
         )
 
         if response.status_code >= 400:
