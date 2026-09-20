@@ -3,6 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import Item, ProcessingJob
+from .analysis import AnalysisSkipped, analyze_item
 from .extractors import extract_video_metadata, extract_webpage
 from .transcription import (
     TranscriptionSkipped,
@@ -58,12 +59,57 @@ def _try_transcription(item: Item) -> None:
     except TranscriptionSkipped as exc:
         mark_transcription_state(item, 'skipped', str(exc))
     except Exception as exc:
-        # Metadados/legenda continuam válidos mesmo que o provedor de
-        # transcrição esteja indisponível. Registramos o erro para nova tentativa.
+        # Metadados/legenda continuam válidos mesmo que a transcrição falhe.
         mark_transcription_state(item, 'error', str(exc))
 
 
-def process_job(job: ProcessingJob):
+def queue_analysis(item: Item) -> None:
+    if not settings.ANALYZE_CONTENT or not settings.GROQ_API_KEY:
+        return
+    if item.analysis:
+        return
+    exists = item.jobs.filter(
+        kind=ProcessingJob.Kind.ANALYZE,
+        state__in=[
+            ProcessingJob.State.PENDING,
+            ProcessingJob.State.RUNNING,
+            ProcessingJob.State.DONE,
+        ],
+    ).exists()
+    if not exists:
+        ProcessingJob.objects.create(
+            item=item,
+            kind=ProcessingJob.Kind.ANALYZE,
+        )
+
+
+def _finish_job(job: ProcessingJob, error: str = '') -> None:
+    job.state = ProcessingJob.State.DONE
+    job.finished_at = timezone.now()
+    job.error = error[:5000]
+    job.save(update_fields=['state', 'finished_at', 'error'])
+
+
+def _fail_job(job: ProcessingJob, exc: Exception) -> None:
+    job.state = ProcessingJob.State.ERROR
+    job.finished_at = timezone.now()
+    job.error = str(exc)[:5000]
+    job.save(update_fields=['state', 'finished_at', 'error'])
+
+
+def _process_analysis_job(job: ProcessingJob) -> None:
+    try:
+        analyze_item(job.item)
+        _finish_job(job)
+    except AnalysisSkipped as exc:
+        # Não é erro do item; apenas não havia configuração/conteúdo suficiente.
+        _finish_job(job, str(exc))
+    except Exception as exc:
+        _fail_job(job, exc)
+        raise
+
+
+def _process_extract_job(job: ProcessingJob) -> None:
     item = job.item
     try:
         if item.type in {Item.Type.INSTAGRAM, Item.Type.YOUTUBE}:
@@ -71,8 +117,6 @@ def process_job(job: ProcessingJob):
 
             if item.type == Item.Type.INSTAGRAM:
                 item.title = _useful_instagram_title(data['title'], data['caption'])
-                # A legenda vive em ItemSource.caption. Não duplicamos no campo
-                # genérico content; a busca inclui a fonte separadamente.
                 item.content = ''
             else:
                 item.title = data['title'] or item.title
@@ -91,7 +135,10 @@ def process_job(job: ProcessingJob):
             _try_transcription(item)
 
         elif item.type == Item.Type.WEB:
-            data = extract_webpage(item.source_url, timeout=settings.WEB_FETCH_TIMEOUT)
+            data = extract_webpage(
+                item.source_url,
+                timeout=settings.WEB_FETCH_TIMEOUT,
+            )
             item.title = data['title'] or item.title
             item.content = data['content']
         else:
@@ -99,16 +146,18 @@ def process_job(job: ProcessingJob):
 
         item.status = Item.Status.PROCESSED
         item.save()
-        job.state = ProcessingJob.State.DONE
-        job.finished_at = timezone.now()
-        job.error = ''
-        job.save(update_fields=['state', 'finished_at', 'error'])
+
+        _finish_job(job)
+        queue_analysis(item)
 
     except Exception as exc:
         item.status = Item.Status.ERROR
         item.save(update_fields=['status', 'updated_at'])
-        job.state = ProcessingJob.State.ERROR
-        job.finished_at = timezone.now()
-        job.error = str(exc)[:5000]
-        job.save(update_fields=['state', 'finished_at', 'error'])
+        _fail_job(job, exc)
         raise
+
+
+def process_job(job: ProcessingJob):
+    if job.kind == ProcessingJob.Kind.ANALYZE:
+        return _process_analysis_job(job)
+    return _process_extract_job(job)
