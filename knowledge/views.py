@@ -198,6 +198,50 @@ def retry_item(request, pk):
 
 
 @require_POST
+def reprocess_item(request, pk):
+    item = get_object_or_404(Item, pk=pk)
+
+    if not item.source_url:
+        messages.info(request, 'Este item não possui uma fonte para reprocessar.')
+        return redirect(item)
+
+    has_active_job = item.jobs.filter(
+        state__in=[ProcessingJob.State.PENDING, ProcessingJob.State.RUNNING]
+    ).exists()
+    if has_active_job:
+        messages.info(request, 'Este item já está sendo processado.')
+        return redirect(item)
+
+    # A extração pode enriquecer o conteúdo (ex.: OCR de slides).
+    # Limpamos somente a análise automática para que ela seja refeita.
+    item.analysis = {}
+    item.summary = ''
+    item.status = Item.Status.PROCESSING
+    item.processing_progress = 5
+    item.processing_stage = 'Na fila para reprocessar'
+    item.save(
+        update_fields=[
+            'analysis',
+            'summary',
+            'status',
+            'processing_progress',
+            'processing_stage',
+            'updated_at',
+        ]
+    )
+    item.topics.clear()
+    item.tags.clear()
+
+    ProcessingJob.objects.create(
+        item=item,
+        kind=ProcessingJob.Kind.EXTRACT,
+    )
+
+    messages.success(request, 'Reprocessamento colocado na fila.')
+    return redirect(item)
+
+
+@require_POST
 def confirm_relation(request, pk):
     relation = get_object_or_404(Relation, pk=pk)
     relation.status = Relation.Status.CONFIRMED
