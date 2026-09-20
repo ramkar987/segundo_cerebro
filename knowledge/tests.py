@@ -16,8 +16,36 @@ class DetectorTests(TestCase):
             'https://www.instagram.com/reel/ABC/',
         )
 
+    def test_instagram_without_protocol(self):
+        detection = detect_capture(
+            'www.instagram.com/reel/DdbK8N-uFUj/?stkn=tracking'
+        )
+        self.assertEqual(detection.kind, 'instagram')
+        self.assertEqual(
+            detection.normalized,
+            'https://www.instagram.com/reel/DdbK8N-uFUj/',
+        )
+
+    def test_instagram_without_www_or_protocol(self):
+        detection = detect_capture(
+            'instagram.com/reel/DdbK8N-uFUj/'
+        )
+        self.assertEqual(detection.kind, 'instagram')
+        self.assertEqual(
+            detection.normalized,
+            'https://www.instagram.com/reel/DdbK8N-uFUj/',
+        )
+
     def test_youtube(self):
         detection = detect_capture('https://youtu.be/abc?t=12')
+        self.assertEqual(detection.kind, 'youtube')
+        self.assertEqual(
+            detection.normalized,
+            'https://www.youtube.com/watch?v=abc',
+        )
+
+    def test_youtube_without_protocol(self):
+        detection = detect_capture('youtu.be/abc?t=12')
         self.assertEqual(detection.kind, 'youtube')
         self.assertEqual(
             detection.normalized,
@@ -28,6 +56,16 @@ class DetectorTests(TestCase):
         detection = detect_capture(
             'https://example.com/artigo?utm_source=x&id=7&fbclid=abc'
         )
+        self.assertEqual(
+            detection.normalized,
+            'https://example.com/artigo?id=7',
+        )
+
+    def test_web_without_protocol(self):
+        detection = detect_capture(
+            'example.com/artigo?utm_source=x&id=7'
+        )
+        self.assertEqual(detection.kind, 'web')
         self.assertEqual(
             detection.normalized,
             'https://example.com/artigo?id=7',
@@ -52,7 +90,7 @@ class CaptureTests(TestCase):
 
     def test_url_is_queued_for_extraction(self):
         item = create_capture(
-            'https://www.instagram.com/reel/ABC/?stkn=qualquer'
+            'www.instagram.com/reel/ABC/?stkn=qualquer'
         )
         self.assertEqual(item.type, Item.Type.INSTAGRAM)
         self.assertEqual(item.status, Item.Status.PROCESSING)
@@ -64,13 +102,13 @@ class CaptureTests(TestCase):
         job = ProcessingJob.objects.get(item=item)
         self.assertEqual(job.kind, ProcessingJob.Kind.EXTRACT)
 
-    def test_same_instagram_is_rejected(self):
+    def test_same_instagram_is_rejected_even_without_protocol(self):
         first = create_capture(
             'https://www.instagram.com/reel/ABC/?stkn=um'
         )
         with self.assertRaises(DuplicateCapture) as ctx:
             create_capture(
-                'https://instagram.com/reel/ABC/?utm_source=dois'
+                'instagram.com/reel/ABC/?utm_source=dois'
             )
         self.assertEqual(ctx.exception.item.pk, first.pk)
         self.assertEqual(Item.objects.count(), 1)
@@ -81,7 +119,7 @@ class CaptureTests(TestCase):
         )
         with self.assertRaises(DuplicateCapture) as ctx:
             create_capture(
-                'https://example.com/artigo?fbclid=abc&id=7'
+                'example.com/artigo?fbclid=abc&id=7'
             )
         self.assertEqual(ctx.exception.item.pk, first.pk)
         self.assertEqual(Item.objects.count(), 1)
