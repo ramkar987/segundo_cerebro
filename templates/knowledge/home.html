@@ -1,65 +1,87 @@
 {% extends 'base.html' %}
-{% block title %}Capturar · Segundo Cérebro<script>
-  (() => {
-    const input = document.getElementById('id_capture');
-    const hint = document.getElementById('capture-hint');
-    if (!input || !hint) return;
-
-    const urlStart = /^(?:https?:\/\/|www\.)\S+/i;
-    const bareUrl = /^(?:https?:\/\/)?(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:[/?#]\S*)?$/i;
-
-    const updateHint = () => {
-      const value = input.value.trim();
-
-      if (!urlStart.test(value)) {
-        hint.hidden = true;
-        hint.className = 'capture-hint';
-        hint.textContent = '';
-        return;
-      }
-
-      hint.hidden = false;
-
-      if (bareUrl.test(value)) {
-        hint.className = 'capture-hint link-detected';
-        hint.textContent =
-          '🔗 Link detectado. O sistema vai identificar se é página web, Instagram ou YouTube.';
-      } else {
-        hint.className = 'capture-hint link-warning';
-        hint.textContent =
-          '⚠️ Esta captura será tratada como Nota porque há texto junto do link. Para capturar a página, deixe somente o link.';
-      }
-    };
-
-    input.addEventListener('input', updateHint);
-    updateHint();
-  })();
-</script>
-{% endblock %}
+{% block title %}Capturar · Segundo Cérebro{% endblock %}
 {% block content %}
 <section class="hero">
   <p class="eyebrow">CAPTURA UNIVERSAL</p>
   <h1>O que você quer guardar?</h1>
   <p class="muted">Cole um Instagram, YouTube, página web ou escreva uma nota. O sistema identifica a origem.</p>
-  <form method="post" class="capture-card">
+
+  <form method="post" class="capture-card" id="single-capture-form">
     {% csrf_token %}
+    <input type="hidden" name="mode" value="single">
     {{ form.capture }}
     <div id="capture-hint" class="capture-hint" hidden></div>
+
     <div class="capture-footer">
       {{ form.title }}
-      <button class="primary" type="submit">Guardar</button>
+      <div class="capture-actions">
+        <button class="primary" type="submit" name="action" value="save">Guardar</button>
+        <button type="submit" name="action" value="save_add_another">Guardar + outro</button>
+      </div>
     </div>
-    {% if form.errors %}<div class="errors">{{ form.errors }}</div>{% endif %}
+
+    {% if form.errors %}
+      <div class="errors">{{ form.errors }}</div>
+    {% endif %}
+  </form>
+
+  <div class="batch-toggle-row">
+    <button
+      type="button"
+      class="button-link batch-toggle"
+      id="batch-toggle"
+      aria-expanded="{% if batch_open %}true{% else %}false{% endif %}"
+      aria-controls="batch-card"
+    >📚 Capturar vários links de uma vez</button>
+  </div>
+
+  <form
+    method="post"
+    class="batch-card"
+    id="batch-card"
+    {% if not batch_open %}hidden{% endif %}
+  >
+    {% csrf_token %}
+    <input type="hidden" name="mode" value="batch">
+
+    <div class="batch-head">
+      <div>
+        <p class="eyebrow">CAPTURA EM LOTE</p>
+        <h2>Vários links, uma vez só</h2>
+      </div>
+      <span class="batch-limit">até 100</span>
+    </div>
+
+    <p class="muted batch-help">
+      Cole um link por linha. Instagram, YouTube e páginas web podem vir misturados.
+      Links já existentes são ignorados automaticamente.
+    </p>
+
+    {{ batch_form.batch_capture }}
+
+    {% if batch_form.errors %}
+      <div class="errors">{{ batch_form.errors }}</div>
+    {% endif %}
+
+    <div class="batch-footer">
+      <span class="muted">Também aceita listas com “-”, “•” ou numeração.</span>
+      <button class="primary" type="submit">Adicionar lote à fila</button>
+    </div>
   </form>
 </section>
+
 <section class="section-head">
   <div><p class="eyebrow">RECENTES</p><h2>Últimas capturas</h2></div>
   <a href="{% url 'library' %}">Ver biblioteca →</a>
 </section>
+
 <div class="grid">
   {% for item in recent %}
   <a class="item-card" href="{{ item.get_absolute_url }}">
-    <div class="card-meta"><span class="badge">{{ item.get_type_display }}</span><span>{{ item.get_status_display }}</span></div>
+    <div class="card-meta">
+      <span class="badge">{{ item.get_type_display }}</span>
+      <span>{{ item.get_status_display }}</span>
+    </div>
     <h3>{{ item.title|default:'Sem título' }}</h3>
     <p>{{ item.summary|default:item.content|truncatechars:150 }}</p>
   </a>
@@ -67,4 +89,57 @@
   <div class="empty">Seu Segundo Cérebro ainda está vazio. A primeira captura aparece aqui.</div>
   {% endfor %}
 </div>
+
+<script>
+  (() => {
+    const input = document.getElementById('id_capture');
+    const hint = document.getElementById('capture-hint');
+
+    if (input && hint) {
+      const urlStart = /^(?:https?:\/\/|www\.)\S+/i;
+      const bareUrl = /^(?:https?:\/\/)?(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:[/?#]\S*)?$/i;
+
+      const updateHint = () => {
+        const value = input.value.trim();
+
+        if (!urlStart.test(value)) {
+          hint.hidden = true;
+          hint.className = 'capture-hint';
+          hint.textContent = '';
+          return;
+        }
+
+        hint.hidden = false;
+
+        if (bareUrl.test(value)) {
+          hint.className = 'capture-hint link-detected';
+          hint.textContent =
+            '🔗 Link detectado. O sistema vai identificar se é página web, Instagram ou YouTube.';
+        } else {
+          hint.className = 'capture-hint link-warning';
+          hint.textContent =
+            '⚠️ Esta captura será tratada como Nota porque há texto junto do link. Para capturar a página, deixe somente o link.';
+        }
+      };
+
+      input.addEventListener('input', updateHint);
+      updateHint();
+    }
+
+    const toggle = document.getElementById('batch-toggle');
+    const batch = document.getElementById('batch-card');
+
+    if (toggle && batch) {
+      toggle.addEventListener('click', () => {
+        batch.hidden = !batch.hidden;
+        toggle.setAttribute('aria-expanded', batch.hidden ? 'false' : 'true');
+
+        if (!batch.hidden) {
+          const batchInput = document.getElementById('id_batch_capture');
+          if (batchInput) batchInput.focus();
+        }
+      });
+    }
+  })();
+</script>
 {% endblock %}
