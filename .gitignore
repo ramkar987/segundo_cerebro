@@ -7,3 +7,4 @@ media/
 staticfiles/
 .DS_Store
 .pytest_cache/
+.process_jobs.lock
