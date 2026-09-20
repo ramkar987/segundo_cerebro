@@ -206,14 +206,18 @@ def _vision_batch(batch: list[tuple[int, str]]) -> list[dict]:
     return slides if isinstance(slides, list) else []
 
 
-def extract_visual_text(image_urls: list[str], progress=None) -> tuple[str, list[dict]]:
-    """Extrai o texto dos slides em lotes de até 3 imagens (limite do modelo)."""
+def extract_visual_text(
+    image_urls: list[str],
+    progress=None,
+) -> tuple[str, list[dict], list[str]]:
+    """Extrai texto dos slides em lotes de até 3 e preserva resultados parciais."""
     urls = [url for url in image_urls if url][: settings.MAX_INSTAGRAM_IMAGES]
     if not urls:
-        return '', []
+        return '', [], []
 
     expected = set(range(1, len(urls) + 1))
     results: dict[int, str] = {}
+    errors: list[str] = []
 
     for offset in range(0, len(urls), 3):
         batch_urls = urls[offset: offset + 3]
@@ -228,7 +232,15 @@ def extract_visual_text(image_urls: list[str], progress=None) -> tuple[str, list
                 f'Lendo texto dos slides {batch[0][0]}–{batch[-1][0]}',
             )
 
-        for entry in _vision_batch(batch):
+        try:
+            batch_result = _vision_batch(batch)
+        except Exception as exc:
+            errors.append(
+                f'Slides {batch[0][0]}–{batch[-1][0]}: {str(exc)[:700]}'
+            )
+            continue
+
+        for entry in batch_result:
             if not isinstance(entry, dict):
                 continue
             try:
@@ -250,4 +262,4 @@ def extract_visual_text(image_urls: list[str], progress=None) -> tuple[str, list
         for entry in details
         if entry['text']
     ]
-    return '\n\n'.join(blocks), details
+    return '\n\n'.join(blocks), details, errors
