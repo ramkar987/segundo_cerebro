@@ -232,14 +232,30 @@
                 {% endif %}
               </div>
             </div>
+
+            {% if relation.status == 'confirmed' %}
+              <details class="relation-more">
+                <summary title="Mais opções" aria-label="Mais opções">⋯</summary>
+                <div class="relation-more-menu">
+                  <form method="post" action="{% url 'unconfirm_relation' relation.pk %}">
+                    {% csrf_token %}
+                    <button type="submit">Desfazer confirmação</button>
+                  </form>
+                  <form method="post" action="{% url 'reject_relation' relation.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="danger-action">Rejeitar relação</button>
+                  </form>
+                </div>
+              </details>
+            {% endif %}
           </div>
 
           {% if relation.explanation %}
             <p class="muted">{{ relation.explanation }}</p>
           {% endif %}
 
-          <div class="relation-actions">
-            {% if relation.status == 'suggested' %}
+          {% if relation.status == 'suggested' %}
+            <div class="relation-actions">
               <form method="post" action="{% url 'confirm_relation' relation.pk %}">
                 {% csrf_token %}
                 <button type="submit">✓ Confirmar</button>
@@ -248,17 +264,8 @@
                 {% csrf_token %}
                 <button type="submit">✕ Rejeitar</button>
               </form>
-            {% elif relation.status == 'confirmed' %}
-              <form method="post" action="{% url 'unconfirm_relation' relation.pk %}">
-                {% csrf_token %}
-                <button type="submit">↶ Desfazer confirmação</button>
-              </form>
-              <form method="post" action="{% url 'reject_relation' relation.pk %}">
-                {% csrf_token %}
-                <button type="submit">✕ Rejeitar relação</button>
-              </form>
-            {% endif %}
-          </div>
+            </div>
+          {% endif %}
         </div>
       {% empty %}
         <p class="muted">Ainda não há relações. Quando houver outros conteúdos semelhantes, o sistema poderá sugerir conexões aqui.</p>
