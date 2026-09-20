@@ -1,23 +1,103 @@
 # 🧠 Segundo Cérebro V2
 
-Uma reconstrução do conceito de “segundo cérebro” como aplicação web Django, sem Streamlit.
+Aplicação web em Django para capturar, organizar, analisar e relacionar conteúdos pessoais: notas, páginas web, Instagram e YouTube.
+
+A ideia é reduzir o atrito entre **“vi algo interessante”** e **“isso entrou no meu acervo de conhecimento de forma pesquisável e conectada”**.
 
 ## O que já existe
 
-- captura universal: texto, Instagram, YouTube e página web;
-- detecção automática e normalização da origem;
-- biblioteca com pesquisa e filtros por tipo/status/favorito;
-- item detalhado com retorno à fonte original;
-- Instagram preserva legenda, hashtags e metadados separadamente;
-- posts e carrosséis de imagens do Instagram podem ter o texto dos slides lido por IA visual;
-- transcrição opcional de Instagram/YouTube via Groq Whisper;
-- análise automática com IA: essência, diferenças legenda/fala, insights, assunto e tags;
-- timestamps da fala armazenados como chunks pesquisáveis;
-- fila persistente de processamento no próprio banco, sem exigir Redis/Celery;
-- worker separado (`process_jobs`) para não bloquear a página;
-- estrutura pronta para tags, assuntos, projetos, chunks e relações;
-- tela inicial de conexões;
-- SQLite para desenvolvimento e PostgreSQL + pgvector preparado para produção.
+### Captura
+
+- captura universal: texto, Instagram, YouTube e páginas web;
+- detecção automática da origem;
+- normalização de URLs e remoção de parâmetros de rastreamento comuns;
+- detecção de duplicados;
+- aviso visual quando um conteúdo já está guardado;
+- botão **Guardar + outro** para capturas sequenciais;
+- **captura em lote de até 100 links**, um por linha;
+- lotes aceitam Instagram, YouTube e páginas web misturados;
+- listas numeradas ou com marcadores também são aceitas;
+- links duplicados no lote são ignorados automaticamente;
+- acompanhamento ao vivo do lote enquanto ele estiver processando;
+- registro no item indicando se a captura foi **individual** ou **em lote**.
+
+### Instagram
+
+- preserva legenda, hashtags, autor, data e metadados separadamente;
+- Reels/vídeos usam extração de mídia e transcrição;
+- posts e carrosséis de imagens usam Instaloader;
+- OCR visual de slides;
+- OCR tenta primeiro **Groq Vision**;
+- em erro ou rate limit da Groq, usa **Gemini 3.5 Flash-Lite** como contingência quando configurado;
+- leitura slide a slide para reduzir consumo de tokens e facilitar recuperação parcial;
+- comparação **Slides × Legenda**;
+- opção de reprocessar a leitura visual quando necessário.
+
+### YouTube e áudio
+
+- extração de metadados e legendas com yt-dlp;
+- transcrição opcional via Groq Whisper;
+- modelo padrão: `whisper-large-v3-turbo`;
+- transcrição armazenada separadamente da descrição/legenda;
+- segmentos com timestamps são armazenados como chunks.
+
+### Análise com IA
+
+- essência/resumo;
+- assunto;
+- subassunto;
+- tags;
+- insights;
+- motivo para guardar;
+- afirmações que valem conferência;
+- comparação legenda × fala ou slides × legenda;
+- validação de evidência para reduzir conteúdo inventado pela análise.
+
+### Biblioteca
+
+- busca textual;
+- filtros por tipo;
+- filtros por status;
+- filtro de favoritos;
+- acesso ao material original;
+- retorno à fonte original;
+- cards recentes com status atualizado enquanto o processamento acontece.
+
+### Relações e conexões
+
+- descoberta automática de relações entre conteúdos;
+- relações sugeridas pela IA;
+- tipos como:
+  - relacionado;
+  - complementa;
+  - contradiz;
+  - mesmo assunto;
+  - continuação;
+  - referência;
+- confirmar ou rejeitar sugestões;
+- relações confirmadas podem ser reconsideradas depois;
+- ações de relações confirmadas ficam em menu discreto;
+- tela de Conexões com estatísticas e relações confirmadas.
+
+O **grafo visual interativo** ainda é um próximo passo.
+
+### Interface
+
+- modo claro e modo escuro;
+- preferência do tema salva no navegador;
+- acompanha automaticamente a preferência do sistema na primeira utilização;
+- barra de progresso do processamento;
+- atualização automática do andamento;
+- interface responsiva para telas menores.
+
+### Processamento
+
+- fila persistente usando o próprio banco;
+- worker separado com `python manage.py process_jobs`;
+- não exige Redis/Celery nesta fase;
+- apenas **um worker** pode ficar ativo por vez;
+- jobs interrompidos podem voltar para a fila ao reiniciar o worker;
+- processamento de relações é tratado como enriquecimento e não invalida um conteúdo já processado.
 
 ## Rodar localmente
 
@@ -25,9 +105,12 @@ Requer Python 3.11+.
 
 ```bash
 python -m venv .venv
-# Windows PowerShell:
-# .venv\Scripts\Activate.ps1
+```
 
+Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py runserver
@@ -35,17 +118,22 @@ python manage.py runserver
 
 Em outro terminal:
 
-```bash
+```powershell
+.venv\Scripts\Activate.ps1
 python manage.py process_jobs
 ```
 
-Abra `http://127.0.0.1:8000/`.
+Abra:
+
+```text
+http://127.0.0.1:8000/
+```
 
 Sem `DATABASE_URL`, o Django usa SQLite automaticamente.
 
 ## Inicializadores e manutenção
 
-Os scripts utilitários ficam organizados por sistema operacional:
+Os scripts ficam organizados por sistema operacional:
 
 ```text
 scripts/
@@ -83,96 +171,131 @@ Isso cria:
 
 O inicializador abre servidor e worker em duas abas do Windows Terminal quando `wt.exe` estiver disponível e só abre o navegador quando o Django estiver respondendo.
 
-Os atalhos não contêm nome de usuário fixo. Por padrão procuram o projeto em `%USERPROFILE%\segundo_cerebro`. Se o projeto estiver em outro local, defina a variável de ambiente `SEGUNDO_CEREBRO_DIR`.
+Os scripts não possuem nome de usuário fixo. Por padrão procuram o projeto em:
+
+```text
+%USERPROFILE%\segundo_cerebro
+```
+
+Se estiver em outro local, pode ser usada a variável:
+
+```text
+SEGUNDO_CEREBRO_DIR
+```
 
 ### Linux / Zorin OS
 
-Crie o ambiente normalmente:
-
 ```bash
+cd ~/segundo_cerebro
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
-```
-
-Depois instale os atalhos da Área de Trabalho:
-
-```bash
 chmod +x scripts/linux/*.sh
 bash scripts/linux/instalar_atalhos_desktop.sh
 ```
 
-O inicializador tenta usar `gnome-terminal` com duas abas (site e worker); se não estiver disponível, usa `x-terminal-emulator`. O navegador é aberto com `xdg-open` somente depois que o Django responder.
+O inicializador tenta usar `gnome-terminal` com duas abas — site e worker — e usa `x-terminal-emulator` como alternativa.
 
-A restauração usa `zenity` para escolher o ZIP quando disponível; sem `zenity`, solicita o caminho no terminal.
+O navegador é aberto com `xdg-open` somente depois que o Django estiver respondendo.
 
-### Backup
+A restauração usa `zenity` quando disponível; sem ele, solicita o caminho do ZIP pelo terminal.
 
-Os backups são gravados em:
+## Backup e restauração
+
+Os backups locais são gravados em:
 
 ```text
 ~/Segundo Cerebro Backups
 ```
 
-Cada ZIP contém uma cópia consistente do `db.sqlite3`, a pasta `media/` quando existir e um arquivo de orientação. São mantidos os 30 backups mais recentes.
+Cada ZIP contém:
 
-O `.env` não entra no backup porque pode conter chaves de API. Guarde-o separadamente em local seguro.
+- cópia consistente do `db.sqlite3`;
+- pasta `media/`, quando existir;
+- arquivo de orientação.
 
-## Transcrição de Instagram e YouTube
+São mantidos os 30 backups mais recentes.
 
-Crie um arquivo `.env` na raiz do projeto:
+O `.env` **não entra no backup**, pois pode conter chaves de API. Guarde uma cópia dele separadamente em local seguro.
+
+## Configuração por ambiente
+
+Crie um arquivo `.env` na raiz do projeto.
+
+Exemplo:
 
 ```env
-GROQ_API_KEY=sua-chave-aqui
+DJANGO_SECRET_KEY=troque-por-uma-chave-grande
+DJANGO_DEBUG=1
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+
+GROQ_API_KEY=
 GROQ_WHISPER_MODEL=whisper-large-v3-turbo
 TRANSCRIBE_MEDIA=1
 TRANSCRIPTION_LANGUAGE=pt
+
 GROQ_VISION_MODEL=qwen/qwen3.8-27b
-GEMINI_API_KEY=sua-chave-do-google-ai-studio
+GEMINI_API_KEY=
 GEMINI_VISION_MODEL=gemini-3.5-flash-lite
 ANALYZE_IMAGES=1
+MAX_INSTAGRAM_IMAGES=20
+
 GROQ_CHAT_MODEL=openai/gpt-oss-20b
 ANALYZE_CONTENT=1
 ```
 
-Novas capturas de vídeo do Instagram/YouTube serão transcritas automaticamente pelo worker.
+Nunca coloque chaves reais no GitHub.
 
-Posts e carrosséis de imagens do Instagram usam Instaloader para obter os slides. O OCR visual tenta primeiro a Groq; se houver limite/erro e uma GEMINI_API_KEY estiver configurada, usa automaticamente o Gemini 3.5 Flash-Lite como contingência. Legenda e texto dos slides permanecem separados para a análise.
+## Estratégia de IA
 
-Para completar mídias que já estavam cadastradas antes da transcrição existir:
+O fluxo atual é dividido por função:
+
+```text
+Vídeo / áudio
+└── Groq Whisper
+
+Análise textual
+└── Groq Chat / GPT-OSS
+
+Instagram imagem / carrossel
+├── Groq Vision
+└── Gemini Vision como fallback
+```
+
+No OCR de carrosséis, os slides são enviados individualmente. Isso reduz o impacto de rate limits e permite preservar resultados parciais quando apenas um slide falha.
+
+## Comandos úteis
+
+Transcrever mídias já cadastradas:
 
 ```bash
 python manage.py transcribe_media
 ```
 
-Para um item específico:
+Item específico:
 
 ```bash
 python manage.py transcribe_media --item 3
 ```
 
-Para retranscrever:
+Forçar nova transcrição:
 
 ```bash
 python manage.py transcribe_media --item 3 --force
 ```
 
-Para analisar com IA os itens já cadastrados:
+Analisar conteúdos já cadastrados:
 
 ```bash
 python manage.py analyze_content
 ```
 
-Ou um item específico:
+Item específico:
 
 ```bash
 python manage.py analyze_content --item 3
 ```
-
-Legenda e transcrição ficam em campos diferentes. Os segmentos da transcrição guardam início e fim em segundos para futuras citações exatas.
-
-A configuração padrão limita o arquivo enviado à transcrição a 24 MB para permanecer abaixo do limite do tier gratuito.
 
 ## PostgreSQL + pgvector
 
@@ -188,39 +311,65 @@ No `.env`:
 DATABASE_URL=postgresql://segundo:segundo@localhost:5432/segundo_cerebro
 ```
 
-O container já traz pgvector. Neste estágio os embeddings continuam como JSON para manter compatibilidade com SQLite; a coluna vetorial será ativada no marco de busca semântica.
+O container já usa uma imagem com pgvector.
 
-## Arquitetura
+Nesta fase, embeddings continuam armazenados como JSON para manter compatibilidade com SQLite. A coluna vetorial entra junto com a busca semântica.
+
+## Arquitetura atual
 
 ```text
 Navegador
    ↓
-Django + HTML/HTMX
+Django
    ├── Captura universal
-   ├── Biblioteca/filtros
-   ├── Item
+   ├── Captura em lote
+   ├── Biblioteca
+   ├── Item detalhado
    └── Conexões
         ↓
-Banco
-   ├── SQLite
-   └── PostgreSQL + pgvector
+SQLite / PostgreSQL
         ↑
 Worker process_jobs
-   ├── Instagram / YouTube via yt-dlp
-   ├── transcrição Groq / Whisper
-   └── Web via Requests + BeautifulSoup
+   ├── Instagram vídeo / YouTube
+   │    ├── yt-dlp
+   │    └── Groq Whisper
+   ├── Instagram imagem / carrossel
+   │    ├── Instaloader
+   │    ├── Groq Vision
+   │    └── Gemini Vision fallback
+   ├── Web
+   │    └── Requests + BeautifulSoup
+   ├── Análise textual
+   │    └── Groq Chat
+   └── Descoberta de relações
 ```
+
+## Dados locais
+
+Por padrão:
+
+- código → GitHub;
+- banco pessoal → `db.sqlite3`;
+- arquivos locais → `media/`;
+- segredos/chaves → `.env`.
+
+O banco, mídia e `.env` ficam fora do Git através do `.gitignore`.
 
 ## Próximos marcos
 
-1. Chunking também de legenda, web e PDF.
+1. Grafo interativo de conexões.
+2. Chunking também de legenda, páginas web e PDFs.
 3. Embeddings e busca híbrida.
-4. RAG com citação de trecho exato.
-5. Sugestões automáticas de relações.
-6. Grafo interativo.
-7. Upload e parsing de PDF.
-8. Deploy gratuito/baixo custo.
+4. Busca semântica.
+5. RAG com citação de trecho exato.
+6. Upload e parsing de PDF/documentos.
+7. Melhorias de histórico, manutenção e reprocessamento em lote.
+8. Deploy gratuito ou de baixo custo.
 
 ## Segurança
 
-Não coloque chaves de API no GitHub. O arquivo `.env` está no `.gitignore`.
+- não coloque chaves de API no GitHub;
+- `.env` está no `.gitignore`;
+- `db.sqlite3` está no `.gitignore`;
+- `media/` está no `.gitignore`;
+- o lock do worker `.process_jobs.lock` também não é versionado.
