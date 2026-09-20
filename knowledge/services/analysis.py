@@ -64,7 +64,7 @@ REGRAS DE CONFIABILIDADE:
 - claims_to_verify deve conter apenas alegações concretas feitas pela fonte que fariam diferença prática e deveriam ser verificadas antes de agir.
 - insights deve conter apenas ideias gerais, procedimentos ou aprendizados diretamente sustentados pelo material; NÃO use insights para repetir alegações que exigem verificação, especialmente gratuidade, preço, elegibilidade, prazo, benefício ou disponibilidade. Essas alegações pertencem SOMENTE a claims_to_verify.
 - NÃO acrescente riscos, conselhos, implicações legais, segurança, ética ou termos de serviço se isso não estiver explicitamente no material.
-- Para CADA insight e claim_to_verify forneça evidence: um pequeno trecho LITERAL copiado de caption, transcript ou content que sustente aquele ponto.
+- Para CADA insight e claim_to_verify forneça evidence: um pequeno trecho LITERAL copiado de caption, transcript, visual_text ou content que sustente aquele ponto.
 - Se não houver um trecho literal que sustente o ponto, NÃO inclua o ponto.
 - why_keep é meta-organização: explique por que vale manter o item, sem validar a veracidade das alegações.
 
