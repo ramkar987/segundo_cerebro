@@ -233,8 +233,8 @@
             <p class="muted">{{ relation.explanation }}</p>
           {% endif %}
 
-          {% if relation.status == 'suggested' %}
-            <div class="relation-actions">
+          <div class="relation-actions">
+            {% if relation.status == 'suggested' %}
               <form method="post" action="{% url 'confirm_relation' relation.pk %}">
                 {% csrf_token %}
                 <button type="submit">✓ Confirmar</button>
@@ -243,8 +243,17 @@
                 {% csrf_token %}
                 <button type="submit">✕ Rejeitar</button>
               </form>
-            </div>
-          {% endif %}
+            {% elif relation.status == 'confirmed' %}
+              <form method="post" action="{% url 'unconfirm_relation' relation.pk %}">
+                {% csrf_token %}
+                <button type="submit">↶ Desfazer confirmação</button>
+              </form>
+              <form method="post" action="{% url 'reject_relation' relation.pk %}">
+                {% csrf_token %}
+                <button type="submit">✕ Rejeitar relação</button>
+              </form>
+            {% endif %}
+          </div>
         </div>
       {% empty %}
         <p class="muted">Ainda não há relações. Quando houver outros conteúdos semelhantes, o sistema poderá sugerir conexões aqui.</p>
