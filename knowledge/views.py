@@ -4,14 +4,68 @@ from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from .forms import CaptureForm
+from .forms import BatchCaptureForm, CaptureForm
 from .models import Item, ProcessingJob, Relation
 from .services.capture import DuplicateCapture, create_capture
+from .services.detector import detect_capture
 
 
 def home(request):
-    form = CaptureForm(request.POST or None)
-    if request.method == 'POST' and form.is_valid():
+    mode = request.POST.get('mode', 'single') if request.method == 'POST' else 'single'
+    form = CaptureForm(
+        request.POST if request.method == 'POST' and mode == 'single' else None
+    )
+    batch_form = BatchCaptureForm(
+        request.POST if request.method == 'POST' and mode == 'batch' else None
+    )
+
+    if request.method == 'POST' and mode == 'batch' and batch_form.is_valid():
+        created_count = 0
+        duplicate_count = 0
+        invalid_count = 0
+        error_count = 0
+
+        for raw in batch_form.cleaned_data['batch_capture']:
+            detection = detect_capture(raw)
+            if detection.kind == 'note':
+                invalid_count += 1
+                continue
+
+            try:
+                create_capture(raw)
+                created_count += 1
+            except DuplicateCapture:
+                duplicate_count += 1
+            except Exception:
+                error_count += 1
+
+        if created_count:
+            messages.success(
+                request,
+                f'{created_count} novo(s) link(s) colocado(s) na fila de processamento.',
+            )
+        if duplicate_count:
+            messages.warning(
+                request,
+                f'{duplicate_count} link(s) já estavam guardados e foram ignorados.',
+                extra_tags='duplicate-warning',
+            )
+        if invalid_count:
+            messages.warning(
+                request,
+                f'{invalid_count} linha(s) não pareciam links e foram ignoradas.',
+            )
+        if error_count:
+            messages.error(
+                request,
+                f'{error_count} link(s) não puderam ser adicionados.',
+            )
+
+        return redirect('home')
+
+    if request.method == 'POST' and mode == 'single' and form.is_valid():
+        action = request.POST.get('action', 'save')
+
         try:
             item = create_capture(
                 form.cleaned_data['capture'],
@@ -19,12 +73,27 @@ def home(request):
             )
         except DuplicateCapture as duplicate:
             item = duplicate.item
+            if action == 'save_add_another':
+                messages.warning(
+                    request,
+                    'Este conteúdo já foi guardado. Pode inserir o próximo.',
+                    extra_tags='duplicate-warning',
+                )
+                return redirect('home')
+
             messages.warning(
                 request,
                 'Este conteúdo já foi guardado. Abrindo o item existente.',
                 extra_tags='duplicate-warning',
             )
             return redirect(item)
+
+        if action == 'save_add_another':
+            messages.success(
+                request,
+                'Conteúdo guardado. Pode inserir o próximo.',
+            )
+            return redirect('home')
 
         if item.status == Item.Status.PROCESSING:
             messages.success(
@@ -36,7 +105,16 @@ def home(request):
         return redirect(item)
 
     recent = Item.objects.all()[:8]
-    return render(request, 'knowledge/home.html', {'form': form, 'recent': recent})
+    return render(
+        request,
+        'knowledge/home.html',
+        {
+            'form': form,
+            'batch_form': batch_form,
+            'batch_open': mode == 'batch',
+            'recent': recent,
+        },
+    )
 
 
 def library(request):
