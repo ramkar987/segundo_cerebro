@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .forms import CaptureForm
-from .models import Item, Relation
+from .models import Item, ProcessingJob, Relation
 from .services.capture import DuplicateCapture, create_capture
 
 
@@ -107,10 +107,23 @@ def item_detail(request, pk):
     ):
         show_content = False
 
+    last_error = (
+        item.jobs.filter(state=ProcessingJob.State.ERROR)
+        .order_by('-finished_at', '-id')
+        .values_list('error', flat=True)
+        .first()
+        or ''
+    )
+
     return render(
         request,
         'knowledge/item_detail.html',
-        {'item': item, 'relations': relations, 'show_content': show_content},
+        {
+            'item': item,
+            'relations': relations,
+            'show_content': show_content,
+            'last_error': last_error,
+        },
     )
 
 
@@ -142,6 +155,46 @@ def toggle_favorite(request, pk):
     return HttpResponseRedirect(
         request.META.get('HTTP_REFERER') or item.get_absolute_url()
     )
+
+
+@require_POST
+def retry_item(request, pk):
+    item = get_object_or_404(Item, pk=pk)
+
+    if item.status != Item.Status.ERROR:
+        messages.info(request, 'Este item não está com erro.')
+        return redirect(item)
+
+    has_active_job = item.jobs.filter(
+        state__in=[ProcessingJob.State.PENDING, ProcessingJob.State.RUNNING]
+    ).exists()
+
+    if not has_active_job:
+        kind = (
+            ProcessingJob.Kind.EXTRACT
+            if item.source_url
+            else ProcessingJob.Kind.ANALYZE
+        )
+        ProcessingJob.objects.create(item=item, kind=kind)
+
+    item.status = Item.Status.PROCESSING
+    item.processing_progress = 5 if item.source_url else 70
+    item.processing_stage = (
+        'Na fila para tentar novamente'
+        if item.source_url
+        else 'Aguardando nova análise da IA'
+    )
+    item.save(
+        update_fields=[
+            'status',
+            'processing_progress',
+            'processing_stage',
+            'updated_at',
+        ]
+    )
+
+    messages.success(request, 'Nova tentativa colocada na fila.')
+    return redirect(item)
 
 
 @require_POST
