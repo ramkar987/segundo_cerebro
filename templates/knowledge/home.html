@@ -261,6 +261,10 @@
         if (finished >= batchItems.length) {
           stopped = true;
           if (batchSummary) batchSummary.textContent = '✓ Lote concluído';
+          const panel = document.getElementById('batch-progress-panel');
+          if (panel) {
+            setTimeout(() => panel.remove(), 1200);
+          }
           return;
         }
 
