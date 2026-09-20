@@ -1,5 +1,5 @@
 # Segundo Cérebro - inicializador local
-# Inicia o servidor Django, o worker e abre o navegador.
+# Inicia servidor Django + worker em duas abas do Windows Terminal e abre o navegador.
 
 $ErrorActionPreference = "Stop"
 $ProjectDir = $PSScriptRoot
@@ -33,29 +33,56 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-$ServerCommand = @"
-Set-Location '$ProjectDir'
-& '$Python' manage.py runserver
-"@
+$Shell = if (Get-Command pwsh.exe -ErrorAction SilentlyContinue) {
+    "pwsh.exe"
+} else {
+    "powershell.exe"
+}
 
-$WorkerCommand = @"
-Set-Location '$ProjectDir'
-& '$Python' manage.py process_jobs
-"@
+$ServerCommand = "& '$Python' manage.py runserver"
+$WorkerCommand = "& '$Python' manage.py process_jobs"
 
-Write-Host "Abrindo servidor Django..." -ForegroundColor Green
-Start-Process powershell.exe -ArgumentList @(
-    "-NoExit",
-    "-ExecutionPolicy", "Bypass",
-    "-Command", $ServerCommand
-)
+if (Get-Command wt.exe -ErrorAction SilentlyContinue) {
+    Write-Host "Abrindo Windows Terminal com duas abas..." -ForegroundColor Green
 
-Write-Host "Abrindo worker..." -ForegroundColor Green
-Start-Process powershell.exe -ArgumentList @(
-    "-NoExit",
-    "-ExecutionPolicy", "Bypass",
-    "-Command", $WorkerCommand
-)
+    $wtArgs = @(
+        "new-tab",
+        "--title", "Segundo Cerebro - Site",
+        "-d", $ProjectDir,
+        $Shell,
+        "-NoExit",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command", $ServerCommand,
+        ";",
+        "new-tab",
+        "--title", "Segundo Cerebro - Worker",
+        "-d", $ProjectDir,
+        $Shell,
+        "-NoExit",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command", $WorkerCommand
+    )
+
+    Start-Process wt.exe -ArgumentList $wtArgs
+} else {
+    Write-Host "Windows Terminal nao encontrado. Abrindo duas janelas do PowerShell..." -ForegroundColor Yellow
+
+    Start-Process $Shell -ArgumentList @(
+        "-NoExit",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command", "Set-Location '$ProjectDir'; $ServerCommand"
+    )
+
+    Start-Process $Shell -ArgumentList @(
+        "-NoExit",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command", "Set-Location '$ProjectDir'; $WorkerCommand"
+    )
+}
 
 Write-Host "Aguardando o servidor iniciar..." -ForegroundColor Yellow
 Start-Sleep -Seconds 2
@@ -66,5 +93,5 @@ Start-Process $url
 
 Write-Host ""
 Write-Host "Pronto." -ForegroundColor Green
-Write-Host "Pode fechar esta janela. Deixe abertas as janelas do servidor e do worker."
+Write-Host "Site e worker foram iniciados."
 Start-Sleep -Seconds 2
