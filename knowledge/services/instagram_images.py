@@ -191,11 +191,14 @@ def _vision_batch(batch: list[tuple[int, str]]) -> list[dict]:
                 'model': settings.GROQ_VISION_MODEL,
                 'messages': [{'role': 'user', 'content': parts}],
                 'response_format': {'type': 'json_object'},
-                'temperature': 0,
-                # O tier gratuito/on-demand pode limitar a saída por minuto.
-                # 800 é suficiente para OCR de até 3 slides sem pedir uma
-                # reserva maior que o limite observado de 1000 tokens/min.
-                'max_completion_tokens': 800,
+                # OCR não precisa de reasoning. No Qwen 3.8 isso ativa
+                # o modo instruct e evita gastar/reservar tokens ocultos.
+                'reasoning_effort': 'none',
+                'temperature': 0.1,
+                # O tier on-demand observado tem 1000 OTPM. Como enviamos
+                # apenas um slide por chamada, 300 tokens é suficiente para
+                # transcrever cards comuns sem reservar uma saída grande.
+                'max_completion_tokens': 300,
             },
             timeout=settings.AI_TIMEOUT,
         )
@@ -231,7 +234,7 @@ def extract_visual_text(
     image_urls: list[str],
     progress=None,
 ) -> tuple[str, list[dict], list[str]]:
-    """Extrai texto dos slides em lotes de até 3 e preserva resultados parciais."""
+    """Extrai texto slide a slide e preserva resultados parciais."""
     urls = [url for url in image_urls if url][: settings.MAX_INSTAGRAM_IMAGES]
     if not urls:
         return '', [], []
@@ -240,8 +243,8 @@ def extract_visual_text(
     results: dict[int, str] = {}
     errors: list[str] = []
 
-    for offset in range(0, len(urls), 3):
-        batch_urls = urls[offset: offset + 3]
+    for offset in range(0, len(urls), 1):
+        batch_urls = urls[offset: offset + 1]
         batch = [
             (offset + position + 1, url)
             for position, url in enumerate(batch_urls)
