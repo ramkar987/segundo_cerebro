@@ -59,3 +59,19 @@ class BatchCaptureForm(forms.Form):
             )
 
         return lines
+
+
+
+class AskLibraryForm(forms.Form):
+    question = forms.CharField(
+        label='',
+        max_length=2000,
+        widget=forms.Textarea(attrs={
+            'rows': 3,
+            'placeholder': (
+                'Pergunte algo sobre o que você já guardou… '
+                'Ex.: O que eu salvei sobre formas de ganhar dinheiro com tecnologia?'
+            ),
+            'autofocus': True,
+        }),
+    )
