@@ -34,9 +34,11 @@ def _canonical_youtube(parsed) -> str:
         if video_id:
             return 'https://www.youtube.com/watch?' + urlencode({'v': video_id})
 
-    if path.startswith('/shorts/') or path.startswith('/live/'):
-        clean_path = '/' + '/'.join(part for part in path.split('/') if part)
-        return urlunparse(('https', 'www.youtube.com', clean_path, '', '', ''))
+    for prefix in ('/shorts/', '/live/', '/embed/'):
+        if path.startswith(prefix):
+            video_id = path[len(prefix):].strip('/').split('/')[0]
+            if video_id:
+                return 'https://www.youtube.com/watch?' + urlencode({'v': video_id})
 
     return urlunparse(('https', 'www.youtube.com', path, '', parsed.query, ''))
 
