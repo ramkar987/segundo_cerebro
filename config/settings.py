@@ -93,6 +93,11 @@ MAX_TRANSCRIPTION_BYTES = int(os.getenv('MAX_TRANSCRIPTION_BYTES', str(24 * 1024
 
 # Leitura visual de posts/carrosséis do Instagram.
 GROQ_VISION_MODEL = os.getenv('GROQ_VISION_MODEL', 'qwen/qwen3.8-27b').strip()
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
+GEMINI_VISION_MODEL = os.getenv(
+    'GEMINI_VISION_MODEL',
+    'gemini-3.5-flash-lite',
+).strip()
 ANALYZE_IMAGES = os.getenv('ANALYZE_IMAGES', '1') == '1'
 MAX_INSTAGRAM_IMAGES = int(os.getenv('MAX_INSTAGRAM_IMAGES', '20'))
 MAX_VISION_IMAGE_BYTES = int(os.getenv('MAX_VISION_IMAGE_BYTES', str(15 * 1024 * 1024)))
