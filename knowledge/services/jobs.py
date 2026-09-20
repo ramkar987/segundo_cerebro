@@ -260,7 +260,9 @@ def _process_extract_job(job: ProcessingJob) -> None:
             source.caption = data['caption']
             source.description = data['description']
             source.original_hashtags = data['hashtags']
-            source.metadata = data['metadata']
+            metadata = dict(source.metadata or {})
+            metadata.update(data['metadata'] or {})
+            source.metadata = metadata
 
             if (
                 item.type == Item.Type.INSTAGRAM
