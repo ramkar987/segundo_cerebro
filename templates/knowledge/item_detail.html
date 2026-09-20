@@ -107,13 +107,47 @@
     </div>
     <div class="relations">
       {% for relation in relations %}
-        {% if relation.source_id == item.id %}
-          <a href="{{ relation.target.get_absolute_url }}">{{ relation.get_relation_type_display }} → {{ relation.target.title }}</a>
-        {% else %}
-          <a href="{{ relation.source.get_absolute_url }}">{{ relation.source.title }} → {{ relation.get_relation_type_display }}</a>
-        {% endif %}
+        <div class="relation-card">
+          <div class="relation-card-head">
+            <div>
+              {% if relation.source_id == item.id %}
+                <a href="{{ relation.target.get_absolute_url }}"><strong>{{ relation.target.title }}</strong></a>
+              {% else %}
+                <a href="{{ relation.source.get_absolute_url }}"><strong>{{ relation.source.title }}</strong></a>
+              {% endif %}
+              <div class="card-meta">
+                <span class="badge">{{ relation.get_relation_type_display }}</span>
+                {% if relation.status == 'suggested' %}
+                  <span>✨ Sugerida pela IA</span>
+                {% else %}
+                  <span>🔗 Confirmada</span>
+                {% endif %}
+                {% if relation.confidence %}
+                  <span>confiança {% widthratio relation.confidence 1 100 %}%</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          {% if relation.explanation %}
+            <p class="muted">{{ relation.explanation }}</p>
+          {% endif %}
+
+          {% if relation.status == 'suggested' %}
+            <div class="relation-actions">
+              <form method="post" action="{% url 'confirm_relation' relation.pk %}">
+                {% csrf_token %}
+                <button type="submit">✓ Confirmar</button>
+              </form>
+              <form method="post" action="{% url 'reject_relation' relation.pk %}">
+                {% csrf_token %}
+                <button type="submit">✕ Rejeitar</button>
+              </form>
+            </div>
+          {% endif %}
+        </div>
       {% empty %}
-        <p class="muted">Ainda não há relações. Elas serão sugeridas quando ativarmos o motor semântico.</p>
+        <p class="muted">Ainda não há relações. Quando houver outros conteúdos semelhantes, o sistema poderá sugerir conexões aqui.</p>
       {% endfor %}
     </div>
   </section>
