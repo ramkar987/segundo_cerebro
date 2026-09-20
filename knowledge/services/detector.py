@@ -1,5 +1,11 @@
 from dataclasses import dataclass
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
+
+
+TRACKING_PARAMS = {
+    'fbclid', 'gclid', 'dclid', 'msclkid', 'mc_cid', 'mc_eid',
+    'ref', 'ref_src', 'igshid', 'si', 'feature',
+}
 
 
 @dataclass(frozen=True)
@@ -35,6 +41,25 @@ def _canonical_youtube(parsed) -> str:
     return urlunparse(('https', 'www.youtube.com', path, '', parsed.query, ''))
 
 
+def _canonical_web(parsed) -> str:
+    host = parsed.netloc.lower()
+    query = []
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        low = key.lower()
+        if low.startswith('utm_') or low in TRACKING_PARAMS:
+            continue
+        query.append((key, value))
+    query.sort()
+    return urlunparse((
+        parsed.scheme.lower(),
+        host,
+        parsed.path or '/',
+        parsed.params,
+        urlencode(query, doseq=True),
+        '',
+    ))
+
+
 def detect_capture(raw: str) -> Detection:
     value = (raw or '').strip()
     parsed = urlparse(value)
@@ -48,9 +73,6 @@ def detect_capture(raw: str) -> Detection:
         if host in {'youtube.com', 'm.youtube.com', 'youtu.be', 'youtube-nocookie.com'} or host.endswith('.youtube.com'):
             return Detection('youtube', _canonical_youtube(parsed))
 
-        # Para páginas comuns, preserva query parameters (podem ser necessários)
-        # mas remove fragmentos puramente de navegação.
-        normalized = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, parsed.query, ''))
-        return Detection('web', normalized)
+        return Detection('web', _canonical_web(parsed))
 
     return Detection('note', value)
