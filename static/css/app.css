@@ -327,3 +327,75 @@ html[data-theme="dark"] .message.error{
     flex-direction:column;
   }
 }
+
+.relation-card{
+  position:relative;
+}
+.relation-more{
+  position:relative;
+  flex:0 0 auto;
+}
+.confirmed-relation-card{
+  padding-right:48px;
+}
+.confirmed-relation-card>.relation-more{
+  position:absolute;
+  top:10px;
+  right:10px;
+}
+.relation-more summary{
+  list-style:none;
+  width:32px;
+  height:30px;
+  display:grid;
+  place-items:center;
+  border-radius:8px;
+  color:var(--muted);
+  cursor:pointer;
+  font-size:21px;
+  line-height:1;
+  user-select:none;
+}
+.relation-more summary::-webkit-details-marker{
+  display:none;
+}
+.relation-more summary:hover,
+.relation-more[open] summary{
+  background:var(--accent-soft);
+  color:var(--text);
+}
+.relation-more-menu{
+  position:absolute;
+  z-index:30;
+  top:34px;
+  right:0;
+  min-width:190px;
+  padding:6px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:10px;
+  box-shadow:var(--shadow);
+}
+.relation-more-menu form{
+  margin:0;
+}
+.relation-more-menu button{
+  width:100%;
+  border:0;
+  background:transparent;
+  text-align:left;
+  padding:9px 10px;
+  border-radius:7px;
+  font-size:13px;
+  font-weight:600;
+  color:var(--text);
+}
+.relation-more-menu button:hover{
+  background:var(--accent-soft);
+}
+.relation-more-menu .danger-action{
+  color:#b33a48;
+}
+html[data-theme="dark"] .relation-more-menu .danger-action{
+  color:#ff9aa6;
+}
