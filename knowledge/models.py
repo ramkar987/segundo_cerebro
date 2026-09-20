@@ -165,6 +165,7 @@ class ProcessingJob(models.Model):
     class Kind(models.TextChoices):
         EXTRACT = 'extract', 'Extrair/processar fonte'
         ANALYZE = 'analyze', 'Analisar com IA'
+        RELATE = 'relate', 'Descobrir relações'
 
     class State(models.TextChoices):
         PENDING = 'pending', 'Aguardando'
