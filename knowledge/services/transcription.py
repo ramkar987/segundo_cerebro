@@ -132,7 +132,7 @@ def save_transcript(item: Item, payload: dict) -> None:
         Chunk.objects.bulk_create(chunks)
 
 
-def transcribe_item(item: Item) -> str:
+def transcribe_item(item: Item, progress=None) -> str:
     if item.type not in {Item.Type.INSTAGRAM, Item.Type.YOUTUBE}:
         raise ValueError('Somente Instagram e YouTube podem ser transcritos neste marco.')
 
@@ -140,10 +140,16 @@ def transcribe_item(item: Item) -> str:
         raise TranscriptionSkipped('TRANSCRIBE_MEDIA está desativado.')
 
     with tempfile.TemporaryDirectory(prefix='segundo-cerebro-') as temp:
+        if progress:
+            progress(35, 'Baixando áudio do vídeo')
         media_path = _download_media(item.source_url, Path(temp))
+        if progress:
+            progress(50, 'Transcrevendo áudio')
         payload = _call_groq(media_path)
 
     save_transcript(item, payload)
+    if progress:
+        progress(65, 'Transcrição concluída')
     return item.source.transcript
 
 
