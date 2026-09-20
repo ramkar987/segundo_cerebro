@@ -91,6 +91,12 @@ TRANSCRIBE_MEDIA = os.getenv('TRANSCRIBE_MEDIA', '1') == '1'
 TRANSCRIPTION_LANGUAGE = os.getenv('TRANSCRIPTION_LANGUAGE', 'pt').strip() or 'pt'
 MAX_TRANSCRIPTION_BYTES = int(os.getenv('MAX_TRANSCRIPTION_BYTES', str(24 * 1024 * 1024)))
 
+# Leitura visual de posts/carrosséis do Instagram.
+GROQ_VISION_MODEL = os.getenv('GROQ_VISION_MODEL', 'qwen/qwen3.8-27b').strip()
+ANALYZE_IMAGES = os.getenv('ANALYZE_IMAGES', '1') == '1'
+MAX_INSTAGRAM_IMAGES = int(os.getenv('MAX_INSTAGRAM_IMAGES', '20'))
+MAX_VISION_IMAGE_BYTES = int(os.getenv('MAX_VISION_IMAGE_BYTES', str(15 * 1024 * 1024)))
+
 
 # Análise textual com IA. Usa a mesma GROQ_API_KEY da transcrição.
 GROQ_CHAT_MODEL = os.getenv('GROQ_CHAT_MODEL', 'openai/gpt-oss-20b').strip()
