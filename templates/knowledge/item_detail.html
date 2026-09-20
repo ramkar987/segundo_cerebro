@@ -8,6 +8,11 @@
       <div class="card-meta">
         <span class="badge">{{ item.get_type_display }}</span>
         <span id="item-status-label">{{ item.get_status_display }}</span>
+        {% if item.source.metadata.capture_mode == 'batch' %}
+          <span>📚 Captura em lote</span>
+        {% elif item.source.metadata.capture_mode == 'individual' %}
+          <span>✍️ Captura individual</span>
+        {% endif %}
         {% if item.source_author %}<span>por {{ item.source_author }}</span>{% endif %}
       </div>
       <h1>{{ item.title|default:'Sem título' }}</h1>
