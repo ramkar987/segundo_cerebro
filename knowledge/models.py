@@ -94,7 +94,14 @@ class ItemSource(models.Model):
 
 
 class Chunk(models.Model):
+    class Kind(models.TextChoices):
+        CONTENT = 'content', 'Conteúdo'
+        CAPTION = 'caption', 'Legenda'
+        TRANSCRIPT = 'transcript', 'Transcrição'
+        PDF = 'pdf', 'PDF'
+
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='chunks')
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.CONTENT, db_index=True)
     text = models.TextField()
     position = models.PositiveIntegerField(default=0)
     page = models.PositiveIntegerField(null=True, blank=True)
@@ -105,8 +112,11 @@ class Chunk(models.Model):
     embedding = models.JSONField(default=list, blank=True)
 
     class Meta:
-        ordering = ['item_id', 'position']
-        indexes = [models.Index(fields=['item', 'position'])]
+        ordering = ['item_id', 'kind', 'position']
+        indexes = [
+            models.Index(fields=['item', 'position']),
+            models.Index(fields=['item', 'kind', 'position']),
+        ]
 
 
 class Relation(models.Model):
