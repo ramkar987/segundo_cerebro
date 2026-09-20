@@ -126,7 +126,7 @@ def candidate_items(item: Item, limit: int = 8) -> list[tuple[Item, float]]:
         )
 
     scored = []
-    for other in qs.iterator():
+    for other in qs:
         if other.id in existing_ids:
             continue
         profile = _item_profile(other)
