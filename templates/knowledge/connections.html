@@ -1,11 +1,101 @@
 {% extends 'base.html' %}
 {% block title %}Conexões · Segundo Cérebro{% endblock %}
 {% block content %}
-<div class="section-head"><div><p class="eyebrow">CONEXÕES</p><h1>Veja como seu conhecimento se relaciona</h1></div></div>
-<p class="muted">Esta primeira tela já expõe as relações confirmadas. O grafo interativo entra no próximo marco, usando os mesmos dados.</p>
-<div class="relations big">
-{% for relation in relations %}
-  <div class="relation-row"><a href="{{ relation.source.get_absolute_url }}">{{ relation.source.title }}</a><span>{{ relation.get_relation_type_display }}</span><a href="{{ relation.target.get_absolute_url }}">{{ relation.target.title }}</a></div>
-{% empty %}<div class="empty">Nenhuma relação confirmada ainda.</div>{% endfor %}
+<div class="section-head">
+  <div>
+    <p class="eyebrow">CONEXÕES</p>
+    <h1>Veja como seu conhecimento se relaciona</h1>
+  </div>
 </div>
+
+<div class="connection-stats">
+  <div class="stat-card">
+    <strong>{{ analyzed_items }}</strong>
+    <span>itens analisados</span>
+  </div>
+  <div class="stat-card">
+    <strong>{{ suggested_count }}</strong>
+    <span>sugestões pendentes</span>
+  </div>
+  <div class="stat-card">
+    <strong>{{ confirmed_count }}</strong>
+    <span>relações confirmadas</span>
+  </div>
+</div>
+
+<section class="detail-section">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">SUGESTÕES</p>
+      <h2>Conexões encontradas pela IA</h2>
+    </div>
+  </div>
+
+  <div class="relations">
+    {% for relation in suggested_relations %}
+      <div class="relation-card">
+        <div class="relation-pair">
+          <a href="{{ relation.source.get_absolute_url }}"><strong>{{ relation.source.title }}</strong></a>
+          <span class="relation-type">{{ relation.get_relation_type_display }}</span>
+          <a href="{{ relation.target.get_absolute_url }}"><strong>{{ relation.target.title }}</strong></a>
+        </div>
+
+        <div class="card-meta">
+          <span>✨ Sugerida pela IA</span>
+          {% if relation.confidence %}
+            <span>confiança {% widthratio relation.confidence 1 100 %}%</span>
+          {% endif %}
+        </div>
+
+        {% if relation.explanation %}
+          <p class="muted">{{ relation.explanation }}</p>
+        {% endif %}
+
+        <div class="relation-actions">
+          <form method="post" action="{% url 'confirm_relation' relation.pk %}">
+            {% csrf_token %}
+            <button type="submit">✓ Confirmar</button>
+          </form>
+          <form method="post" action="{% url 'reject_relation' relation.pk %}">
+            {% csrf_token %}
+            <button type="submit">✕ Rejeitar</button>
+          </form>
+        </div>
+      </div>
+    {% empty %}
+      <div class="empty">
+        {% if analyzed_items < 2 %}
+          São necessários pelo menos 2 conteúdos analisados para descobrir relações.
+        {% else %}
+          Ainda não há sugestões pendentes. O sistema só cria conexões quando encontra uma relação suficientemente forte.
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="detail-section">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">CONFIRMADAS</p>
+      <h2>Relações que fazem parte do seu mapa</h2>
+    </div>
+  </div>
+
+  <div class="relations big">
+    {% for relation in confirmed_relations %}
+      <div class="relation-row">
+        <a href="{{ relation.source.get_absolute_url }}">{{ relation.source.title }}</a>
+        <span>{{ relation.get_relation_type_display }}</span>
+        <a href="{{ relation.target.get_absolute_url }}">{{ relation.target.title }}</a>
+      </div>
+    {% empty %}
+      <div class="empty">Nenhuma relação confirmada ainda.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<p class="muted connection-footnote">
+  O grafo visual entra depois. Primeiro validamos as conexões sugeridas para evitar um mapa cheio de relações ruins.
+</p>
 {% endblock %}
