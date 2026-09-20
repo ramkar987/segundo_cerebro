@@ -44,12 +44,26 @@
 
       <div class="processing-steps">
         <span>Fonte</span>
-        <span>Áudio</span>
+        <span>Mídia</span>
         <span>IA</span>
         <span>Relações</span>
         <span>Pronto</span>
       </div>
       <p class="muted processing-note">Esta página atualiza o andamento automaticamente.</p>
+    </section>
+  {% endif %}
+
+  {% if item.status == 'error' %}
+    <section class="detail-section">
+      <p class="eyebrow">PROCESSAMENTO</p>
+      <h2>Não foi possível concluir esta captura</h2>
+      {% if last_error %}
+        <p class="muted">{{ last_error|truncatechars:900 }}</p>
+      {% endif %}
+      <form method="post" action="{% url 'retry_item' item.pk %}">
+        {% csrf_token %}
+        <button type="submit">↻ Tentar novamente</button>
+      </form>
     </section>
   {% endif %}
 
@@ -97,11 +111,23 @@
 
   {% if item.analysis.video_explains or item.analysis.caption_adds or item.analysis.common_points %}
     <section class="detail-section">
-      <p class="eyebrow">LEGENDA × FALA</p>
+      <p class="eyebrow">
+        {% if item.source.metadata.media_kind == 'image' or item.source.metadata.media_kind == 'carousel' %}
+          SLIDES × LEGENDA
+        {% else %}
+          LEGENDA × FALA
+        {% endif %}
+      </p>
       <div class="grid">
         {% if item.analysis.video_explains %}
           <div class="item-card">
-            <h3>🎙 Só no vídeo</h3>
+            <h3>
+              {% if item.source.metadata.media_kind == 'image' or item.source.metadata.media_kind == 'carousel' %}
+                🖼 Só nos slides
+              {% else %}
+                🎙 Só no vídeo
+              {% endif %}
+            </h3>
             <ul>
               {% for point in item.analysis.video_explains %}<li>{{ point }}</li>{% endfor %}
             </ul>
@@ -189,7 +215,13 @@
 
       {% if show_content %}
         <details>
-          <summary>Ver conteúdo original</summary>
+          <summary>
+            {% if item.source.metadata.media_kind == 'image' or item.source.metadata.media_kind == 'carousel' %}
+              Ver texto extraído dos slides
+            {% else %}
+              Ver conteúdo original
+            {% endif %}
+          </summary>
           <div class="prose">{{ item.content|linebreaks }}</div>
         </details>
       {% endif %}
