@@ -11,6 +11,12 @@ $launchers = @(
     "Restaurar Segundo Cerebro.bat"
 )
 
+$legacyLauncher = Join-Path $Desktop "iniciar_segundo_cerebro.bat"
+if (Test-Path $legacyLauncher) {
+    Remove-Item $legacyLauncher -Force
+    Write-Host "Removido atalho antigo: $legacyLauncher" -ForegroundColor Yellow
+}
+
 foreach ($name in $launchers) {
     $source = Join-Path $WindowsScripts $name
     $destination = Join-Path $Desktop $name
