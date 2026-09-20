@@ -70,6 +70,48 @@
   </form>
 </section>
 
+{% if batch_items %}
+<section class="batch-progress-panel" id="batch-progress-panel">
+  <div class="batch-progress-head">
+    <div>
+      <p class="eyebrow">ÚLTIMO LOTE</p>
+      <h2>Andamento do processamento</h2>
+    </div>
+    <strong id="batch-summary">{{ batch_items|length }} item(ns)</strong>
+  </div>
+
+  <div class="batch-progress-list">
+    {% for item in batch_items %}
+      <a
+        class="batch-progress-item"
+        href="{{ item.get_absolute_url }}"
+        data-progress-url="{% url 'item_progress' item.pk %}"
+        data-item-id="{{ item.pk }}"
+      >
+        <div class="batch-progress-top">
+          <div class="batch-progress-title-wrap">
+            <span class="badge batch-type">{{ item.get_type_display }}</span>
+            <strong class="batch-title">{{ item.title|default:'Captura em processamento' }}</strong>
+          </div>
+          <span class="batch-percent">{{ item.processing_progress }}%</span>
+        </div>
+
+        <progress
+          class="batch-progress-bar"
+          max="100"
+          value="{{ item.processing_progress }}"
+        >{{ item.processing_progress }}%</progress>
+
+        <div class="batch-progress-meta">
+          <span class="batch-stage">{{ item.processing_stage|default:'Na fila' }}</span>
+          <span class="batch-status">{{ item.get_status_display }}</span>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section class="section-head">
   <div><p class="eyebrow">RECENTES</p><h2>Últimas capturas</h2></div>
   <a href="{% url 'library' %}">Ver biblioteca →</a>
@@ -139,6 +181,68 @@
           if (batchInput) batchInput.focus();
         }
       });
+    }
+
+    const batchItems = Array.from(
+      document.querySelectorAll('.batch-progress-item[data-progress-url]')
+    );
+    const batchSummary = document.getElementById('batch-summary');
+
+    if (batchItems.length) {
+      let stopped = false;
+
+      const pollBatch = async () => {
+        if (stopped) return;
+
+        let finished = 0;
+
+        await Promise.all(batchItems.map(async (card) => {
+          try {
+            const response = await fetch(card.dataset.progressUrl, {
+              headers: {'X-Requested-With': 'XMLHttpRequest'},
+              cache: 'no-store'
+            });
+            if (!response.ok) return;
+
+            const data = await response.json();
+            const bar = card.querySelector('.batch-progress-bar');
+            const percent = card.querySelector('.batch-percent');
+            const stage = card.querySelector('.batch-stage');
+            const status = card.querySelector('.batch-status');
+            const title = card.querySelector('.batch-title');
+            const type = card.querySelector('.batch-type');
+
+            if (bar) bar.value = data.progress;
+            if (percent) percent.textContent = data.progress + '%';
+            if (stage) stage.textContent = data.stage || data.status_label;
+            if (status) status.textContent = data.status_label;
+            if (title) title.textContent = data.title || 'Sem título';
+            if (type) type.textContent = data.type_label || type.textContent;
+
+            card.classList.toggle('done', data.done && data.status !== 'error');
+            card.classList.toggle('failed', data.status === 'error');
+
+            if (data.done) finished += 1;
+          } catch (error) {
+            // Mantém o último estado visível e tenta novamente.
+          }
+        }));
+
+        if (batchSummary) {
+          batchSummary.textContent =
+            finished + '/' + batchItems.length + ' concluído(s)';
+        }
+
+        if (finished >= batchItems.length) {
+          stopped = true;
+          if (batchSummary) batchSummary.textContent = '✓ Lote concluído';
+          return;
+        }
+
+        setTimeout(pollBatch, 2000);
+      };
+
+      setTimeout(pollBatch, 700);
     }
   })();
 </script>
