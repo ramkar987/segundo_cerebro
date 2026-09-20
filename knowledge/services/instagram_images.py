@@ -147,7 +147,7 @@ def _download_image(url: str) -> tuple[bytes, str]:
     return data, content_type
 
 
-def _vision_batch(batch: list[tuple[int, str]]) -> list[dict]:
+def _vision_batch_groq(batch: list[tuple[int, str]]) -> list[dict]:
     if not settings.GROQ_API_KEY:
         raise InstagramImageExtractionError('GROQ_API_KEY não configurada.')
 
@@ -228,6 +228,203 @@ def _vision_batch(batch: list[tuple[int, str]]) -> list[dict]:
     payload = json.loads(raw)
     slides = payload.get('slides') or []
     return slides if isinstance(slides, list) else []
+
+
+
+def _vision_batch_gemini(batch: list[tuple[int, str]]) -> list[dict]:
+    if not settings.GEMINI_API_KEY:
+        raise InstagramImageExtractionError('GEMINI_API_KEY não configurada.')
+
+    prompt = (
+        'Transcreva SOMENTE o texto visível nas imagens a seguir. '
+        'Não explique, não resuma e não complete frases por conhecimento externo. '
+        'Preserve a ordem de leitura e os números importantes. '
+        'Cada imagem é um slide de um carrossel. '
+        'Retorne JSON válido no formato '
+        '{"slides":[{"index":1,"text":"texto literal"}]}. '
+        'Se um slide não tiver texto legível, use text vazio.'
+    )
+
+    parts = [{'text': prompt}]
+    for index, url in batch:
+        data, content_type = _download_image(url)
+        encoded = base64.b64encode(data).decode('ascii')
+        parts.append({'text': f'SLIDE {index}'})
+        parts.append(
+            {
+                'inline_data': {
+                    'mime_type': content_type,
+                    'data': encoded,
+                }
+            }
+        )
+
+    endpoint = (
+        'https://generativelanguage.googleapis.com/v1beta/models/'
+        f'{settings.GEMINI_VISION_MODEL}:generateContent'
+    )
+
+    response = None
+    for attempt in range(3):
+        response = requests.post(
+            endpoint,
+            headers={
+                'x-goog-api-key': settings.GEMINI_API_KEY,
+                'Content-Type': 'application/json',
+            },
+            json={
+                'contents': [
+                    {
+                        'role': 'user',
+                        'parts': parts,
+                    }
+                ],
+                'generationConfig': {
+                    'temperature': 0,
+                    'maxOutputTokens': 350,
+                    'responseMimeType': 'application/json',
+                },
+            },
+            timeout=settings.AI_TIMEOUT,
+        )
+
+        if response.status_code != 429 or attempt >= 2:
+            break
+
+        retry_after = response.headers.get('Retry-After')
+        try:
+            wait_seconds = float(retry_after) if retry_after else 10.0
+        except (TypeError, ValueError):
+            wait_seconds = 10.0
+        time.sleep(max(2.0, min(wait_seconds, 45.0)))
+
+    if response is None or response.status_code >= 400:
+        status = response.status_code if response is not None else 'sem resposta'
+        detail = response.text[:1200] if response is not None else ''
+        raise InstagramImageExtractionError(
+            f'Gemini Vision retornou HTTP {status}: {detail}'
+        )
+
+    body = response.json()
+    candidates = body.get('candidates') or []
+    if not candidates:
+        raise InstagramImageExtractionError(
+            f'Gemini Vision não retornou candidato: {json.dumps(body)[:1000]}'
+        )
+
+    response_parts = (
+        candidates[0]
+        .get('content', {})
+        .get('parts', [])
+    )
+    raw = ''.join(
+        str(part.get('text') or '')
+        for part in response_parts
+        if isinstance(part, dict)
+    ).strip()
+
+    if raw.startswith('```'):
+        raw = re.sub(r'^\`\`\`(?:json)?\s*|\s*\`\`\`    """Extrai texto slide a slide e preserva resultados parciais."""
+    urls = [url for url in image_urls if url][: settings.MAX_INSTAGRAM_IMAGES]
+    if not urls:
+        return '', [], []
+
+    expected = set(range(1, len(urls) + 1))
+    results: dict[int, str] = {}
+    providers: dict[int, str] = {}
+    errors: list[str] = []
+
+    for offset in range(0, len(urls), 1):
+        batch_urls = urls[offset: offset + 1]
+        batch = [
+            (offset + position + 1, url)
+            for position, url in enumerate(batch_urls)
+        ]
+
+        if progress:
+            progress(
+                35 + int((offset / max(len(urls), 1)) * 25),
+                f'Lendo texto dos slides {batch[0][0]}–{batch[-1][0]}',
+            )
+
+        try:
+            batch_result = _vision_batch(batch)
+        except Exception as exc:
+            errors.append(
+                f'Slides {batch[0][0]}–{batch[-1][0]}: {str(exc)[:700]}'
+            )
+            continue
+
+        for entry in batch_result:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                index = int(entry.get('index'))
+            except (TypeError, ValueError):
+                continue
+            if index not in expected:
+                continue
+            text = str(entry.get('text') or '').strip()
+            results[index] = text
+            providers[index] = str(entry.get('_provider') or '')
+
+    details = [
+        {
+            'index': index,
+            'text': results.get(index, ''),
+            'provider': providers.get(index, ''),
+        }
+        for index in range(1, len(urls) + 1)
+    ]
+
+    blocks = [
+        f'[SLIDE {entry["index"]}]\n{entry["text"]}'
+        for entry in details
+        if entry['text']
+    ]
+    return '\n\n'.join(blocks), details, errors
+, '', raw)
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise InstagramImageExtractionError(
+            f'Gemini Vision retornou JSON inválido: {raw[:900]}'
+        ) from exc
+
+    slides = payload.get('slides') or []
+    return slides if isinstance(slides, list) else []
+
+
+def _vision_batch(batch: list[tuple[int, str]]) -> list[dict]:
+    errors: list[str] = []
+
+    if settings.GROQ_API_KEY:
+        try:
+            slides = _vision_batch_groq(batch)
+            for slide in slides:
+                if isinstance(slide, dict):
+                    slide['_provider'] = 'groq'
+            return slides
+        except Exception as exc:
+            errors.append(f'Groq: {exc}')
+
+    if settings.GEMINI_API_KEY:
+        try:
+            slides = _vision_batch_gemini(batch)
+            for slide in slides:
+                if isinstance(slide, dict):
+                    slide['_provider'] = 'gemini'
+            return slides
+        except Exception as exc:
+            errors.append(f'Gemini: {exc}')
+
+    if not errors:
+        errors.append('Nenhuma chave de visão configurada.')
+
+    raise InstagramImageExtractionError(
+        'Falha em todos os provedores de visão. ' + ' | '.join(errors)
+    )
 
 
 def extract_visual_text(
