@@ -67,6 +67,49 @@
     </section>
   {% endif %}
 
+  {% if item.type == 'instagram' and item.source.metadata.media_kind == 'carousel' %}
+    {% with visual=item.source.metadata.visual_extraction %}
+      {% if visual.status == 'error' or visual.status == 'partial' or visual.status == 'skipped' %}
+        <section class="detail-section">
+          <p class="eyebrow">LEITURA DOS SLIDES</p>
+          {% if visual.status == 'partial' %}
+            <h2>Parte dos slides foi lida</h2>
+            <p class="muted">
+              Foram lidos {{ visual.slides_with_text|default:0 }} de {{ visual.slide_count|default:0 }} slides.
+              O conteúdo disponível já entrou na análise, mas vale tentar novamente para completar.
+            </p>
+          {% elif visual.status == 'error' %}
+            <h2>Os slides não puderam ser lidos</h2>
+            <p class="muted">
+              A legenda foi analisada normalmente, mas o texto dentro das imagens ficou de fora.
+            </p>
+          {% else %}
+            <h2>Leitura visual não executada</h2>
+          {% endif %}
+
+          {% if visual.message %}
+            <p class="muted">{{ visual.message|truncatechars:900 }}</p>
+          {% endif %}
+          {% if visual.errors %}
+            <details>
+              <summary>Ver detalhes da leitura visual</summary>
+              <ul class="prose">
+                {% for error in visual.errors %}
+                  <li>{{ error|truncatechars:700 }}</li>
+                {% endfor %}
+              </ul>
+            </details>
+          {% endif %}
+
+          <form method="post" action="{% url 'reprocess_item' item.pk %}">
+            {% csrf_token %}
+            <button type="submit">↻ Tentar ler slides novamente</button>
+          </form>
+        </section>
+      {% endif %}
+    {% endwith %}
+  {% endif %}
+
   {% if item.summary %}
     <section class="detail-section">
       <p class="eyebrow">ESSÊNCIA</p>
