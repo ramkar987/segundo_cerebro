@@ -5,6 +5,11 @@ from django.utils import timezone
 from ..models import Item, ProcessingJob
 from .analysis import AnalysisSkipped, analyze_item
 from .extractors import extract_video_metadata, extract_webpage
+from .instagram_images import (
+    InstagramImageExtractionError,
+    extract_instagram_post,
+    extract_visual_text,
+)
 from .relations import RelationDiscoverySkipped, discover_relations
 from .transcription import (
     TranscriptionSkipped,
@@ -195,7 +200,41 @@ def _process_extract_job(job: ProcessingJob) -> None:
 
     try:
         if item.type in {Item.Type.INSTAGRAM, Item.Type.YOUTUBE}:
-            data = extract_video_metadata(item.source_url)
+            if item.type == Item.Type.INSTAGRAM and '/p/' in item.source_url:
+                try:
+                    post = extract_instagram_post(item.source_url)
+                    data = {
+                        'title': post.title,
+                        'author': post.author,
+                        'description': post.description,
+                        'caption': post.caption,
+                        'hashtags': post.hashtags,
+                        'source_date': post.source_date,
+                        'metadata': post.metadata,
+                        'image_urls': post.image_urls,
+                        'media_kind': post.media_kind,
+                        'has_video': post.has_video,
+                    }
+                except InstagramImageExtractionError as instaloader_exc:
+                    # Alguns /p/ são vídeos. Se o leitor de posts falhar,
+                    # ainda damos ao yt-dlp a chance de processá-los.
+                    try:
+                        data = extract_video_metadata(item.source_url)
+                        data['image_urls'] = []
+                        data['media_kind'] = 'video'
+                        data['has_video'] = True
+                    except Exception as ytdlp_exc:
+                        raise RuntimeError(
+                            'Não foi possível ler este post do Instagram. '
+                            f'Instaloader: {instaloader_exc}. '
+                            f'yt-dlp: {ytdlp_exc}'
+                        ) from ytdlp_exc
+            else:
+                data = extract_video_metadata(item.source_url)
+                data['image_urls'] = []
+                data['media_kind'] = 'video'
+                data['has_video'] = True
+
             _set_progress(item, 25, 'Metadados e legenda obtidos')
 
             if item.type == Item.Type.INSTAGRAM:
@@ -213,10 +252,64 @@ def _process_extract_job(job: ProcessingJob) -> None:
             source.description = data['description']
             source.original_hashtags = data['hashtags']
             source.metadata = data['metadata']
-            source.save()
 
+            if (
+                item.type == Item.Type.INSTAGRAM
+                and data.get('media_kind') in {'image', 'carousel'}
+            ):
+                if settings.ANALYZE_IMAGES and data.get('image_urls'):
+                    try:
+                        visual_text, slides = extract_visual_text(
+                            data['image_urls'],
+                            progress=lambda value, label: _set_progress(
+                                item, value, label
+                            ),
+                        )
+                        item.content = visual_text
+                        metadata = dict(source.metadata or {})
+                        metadata['visual_extraction'] = {
+                            'status': 'done',
+                            'model': settings.GROQ_VISION_MODEL,
+                            'slide_count': len(slides),
+                            'slides_with_text': sum(
+                                1 for slide in slides if slide.get('text')
+                            ),
+                        }
+                        source.metadata = metadata
+                        _set_progress(item, 65, 'Texto dos slides extraído')
+                    except Exception as exc:
+                        # A legenda continua útil; falha visual não invalida a captura.
+                        metadata = dict(source.metadata or {})
+                        metadata['visual_extraction'] = {
+                            'status': 'error',
+                            'model': settings.GROQ_VISION_MODEL,
+                            'message': str(exc)[:1000],
+                        }
+                        source.metadata = metadata
+                        _set_progress(
+                            item,
+                            65,
+                            'Não foi possível ler os slides; seguindo com a legenda',
+                        )
+                else:
+                    metadata = dict(source.metadata or {})
+                    metadata['visual_extraction'] = {
+                        'status': 'skipped',
+                        'message': (
+                            'Leitura visual desativada.'
+                            if not settings.ANALYZE_IMAGES
+                            else 'Post sem imagem disponível para leitura.'
+                        ),
+                    }
+                    source.metadata = metadata
+                    _set_progress(item, 65, 'Seguindo com a legenda')
+            else:
+                source.save()
+                item.save()
+                _try_transcription(item)
+
+            source.save()
             item.save()
-            _try_transcription(item)
 
         elif item.type == Item.Type.WEB:
             _set_progress(item, 35, 'Extraindo conteúdo da página')
