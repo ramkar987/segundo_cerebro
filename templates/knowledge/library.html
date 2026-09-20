@@ -14,7 +14,15 @@
 {% for item in items %}
   <a class="list-item" href="{{ item.get_absolute_url }}">
     <div class="list-main">
-      <div class="card-meta"><span class="badge">{{ item.get_type_display }}</span><span>{{ item.get_status_display }}</span>{% if item.favorite %}<span>⭐</span>{% endif %}</div>
+      <div class="card-meta">
+        <span class="badge">{{ item.get_type_display }}</span>
+        {% if item.status == 'processing' %}
+          <span>Processando · {{ item.processing_progress }}% · {{ item.processing_stage }}</span>
+        {% else %}
+          <span>{{ item.get_status_display }}</span>
+        {% endif %}
+        {% if item.favorite %}<span>⭐</span>{% endif %}
+      </div>
       <h3>{{ item.title|default:'Sem título' }}</h3>
       <p>{{ item.summary|default:item.content|truncatechars:220 }}</p>
     </div>
