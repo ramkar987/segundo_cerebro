@@ -13,6 +13,7 @@ from .instagram_images import (
     extract_visual_text,
 )
 from .relations import RelationDiscoverySkipped, discover_relations
+from .semantic import SemanticIndexSkipped, index_item
 from .transcription import (
     TranscriptionSkipped,
     mark_transcription_state,
@@ -158,6 +159,30 @@ def _fail_job(job: ProcessingJob, exc: Exception) -> None:
     job.save(update_fields=['state', 'finished_at', 'error'])
 
 
+def _complete_item(item: Item, stage: str = 'Concluído') -> None:
+    """Finaliza sem deixar falha de embeddings invalidar o conteúdo."""
+    final_stage = stage
+
+    if settings.SEMANTIC_SEARCH_ENABLED and settings.GEMINI_API_KEY:
+        try:
+            _set_progress(
+                item,
+                97,
+                'Indexando para busca semântica',
+                Item.Status.PROCESSING,
+            )
+            indexed = index_item(item, force=True)
+            if indexed:
+                final_stage = f'{stage} · busca semântica pronta'
+        except SemanticIndexSkipped:
+            pass
+        except Exception:
+            # index_item registra o erro no metadata da fonte.
+            final_stage = f'{stage}; busca semântica pendente'
+
+    _set_progress(item, 100, final_stage, Item.Status.PROCESSED)
+
+
 def _process_analysis_job(job: ProcessingJob) -> None:
     item = job.item
     _set_progress(item, 75, 'Analisando conteúdo com IA', Item.Status.PROCESSING)
@@ -170,11 +195,11 @@ def _process_analysis_job(job: ProcessingJob) -> None:
         if queue_relations(item):
             _set_progress(item, 92, 'Procurando conteúdos relacionados')
         else:
-            _set_progress(item, 100, 'Concluído', Item.Status.PROCESSED)
+            _complete_item(item)
 
     except AnalysisSkipped as exc:
         _finish_job(job, str(exc))
-        _set_progress(item, 100, 'Concluído sem análise da IA', Item.Status.PROCESSED)
+        _complete_item(item, 'Concluído sem análise da IA')
     except Exception as exc:
         _fail_job(job, exc)
         _set_progress(item, 100, 'Erro na análise da IA', Item.Status.ERROR)
@@ -188,18 +213,16 @@ def _process_relation_job(job: ProcessingJob) -> None:
     try:
         created = discover_relations(item)
         _finish_job(job, f'{len(created)} relação(ões) sugerida(s).')
-        _set_progress(item, 100, 'Concluído', Item.Status.PROCESSED)
+        _complete_item(item)
     except RelationDiscoverySkipped as exc:
         _finish_job(job, str(exc))
-        _set_progress(item, 100, 'Concluído', Item.Status.PROCESSED)
+        _complete_item(item)
     except Exception as exc:
         # Relações são enriquecimento; não invalidam o conteúdo já processado.
         _fail_job(job, exc)
-        _set_progress(
+        _complete_item(
             item,
-            100,
             'Concluído; relações não puderam ser analisadas',
-            Item.Status.PROCESSED,
         )
 
 
@@ -372,7 +395,7 @@ def _process_extract_job(job: ProcessingJob) -> None:
         if queue_analysis(item):
             _set_progress(item, 70, 'Aguardando análise da IA', Item.Status.PROCESSING)
         else:
-            _set_progress(item, 100, 'Concluído', Item.Status.PROCESSED)
+            _complete_item(item)
 
     except Exception as exc:
         _fail_job(job, exc)
