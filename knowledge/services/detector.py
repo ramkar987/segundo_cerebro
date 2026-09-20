@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
 
 
@@ -7,11 +8,33 @@ TRACKING_PARAMS = {
     'ref', 'ref_src', 'igshid', 'si', 'feature',
 }
 
+BARE_URL_RE = re.compile(
+    r'^(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:[/?#].*)?$',
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class Detection:
     kind: str
     normalized: str
+
+
+def _parse_possible_url(value: str):
+    parsed = urlparse(value)
+    if parsed.scheme in {'http', 'https'} and parsed.netloc:
+        return parsed
+
+    # Aceita URLs coladas sem protocolo:
+    # www.instagram.com/..., instagram.com/..., youtu.be/..., example.com/...
+    if (
+        value
+        and not any(ch.isspace() for ch in value)
+        and BARE_URL_RE.match(value)
+    ):
+        return urlparse('https://' + value)
+
+    return None
 
 
 def _canonical_instagram(parsed) -> str:
@@ -64,8 +87,9 @@ def _canonical_web(parsed) -> str:
 
 def detect_capture(raw: str) -> Detection:
     value = (raw or '').strip()
-    parsed = urlparse(value)
-    if parsed.scheme in {'http', 'https'} and parsed.netloc:
+    parsed = _parse_possible_url(value)
+
+    if parsed:
         host = parsed.netloc.lower().split(':')[0]
         host = host[4:] if host.startswith('www.') else host
 
