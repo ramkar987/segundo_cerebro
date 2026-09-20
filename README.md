@@ -42,6 +42,82 @@ Abra `http://127.0.0.1:8000/`.
 
 Sem `DATABASE_URL`, o Django usa SQLite automaticamente.
 
+## Inicializadores e manutenção
+
+Os scripts utilitários ficam organizados por sistema operacional:
+
+```text
+scripts/
+├── common/
+│   ├── backup_segundo_cerebro.py
+│   └── restaurar_segundo_cerebro.py
+├── windows/
+│   ├── Segundo Cerebro.bat
+│   ├── iniciar_segundo_cerebro.ps1
+│   ├── Backup Segundo Cerebro.bat
+│   ├── backup_segundo_cerebro.ps1
+│   ├── Restaurar Segundo Cerebro.bat
+│   ├── restaurar_segundo_cerebro.ps1
+│   └── instalar_atalhos_desktop.ps1
+└── linux/
+    ├── iniciar_segundo_cerebro.sh
+    ├── backup_segundo_cerebro.sh
+    ├── restaurar_segundo_cerebro.sh
+    └── instalar_atalhos_desktop.sh
+```
+
+### Windows
+
+Para instalar ou atualizar os atalhos da Área de Trabalho:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\instalar_atalhos_desktop.ps1
+```
+
+Isso cria:
+
+- `Segundo Cerebro.bat`;
+- `Backup Segundo Cerebro.bat`;
+- `Restaurar Segundo Cerebro.bat`.
+
+O inicializador abre servidor e worker em duas abas do Windows Terminal quando `wt.exe` estiver disponível e só abre o navegador quando o Django estiver respondendo.
+
+Os atalhos não contêm nome de usuário fixo. Por padrão procuram o projeto em `%USERPROFILE%\segundo_cerebro`. Se o projeto estiver em outro local, defina a variável de ambiente `SEGUNDO_CEREBRO_DIR`.
+
+### Linux / Zorin OS
+
+Crie o ambiente normalmente:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+```
+
+Depois instale os atalhos da Área de Trabalho:
+
+```bash
+chmod +x scripts/linux/*.sh
+bash scripts/linux/instalar_atalhos_desktop.sh
+```
+
+O inicializador tenta usar `gnome-terminal` com duas abas (site e worker); se não estiver disponível, usa `x-terminal-emulator`. O navegador é aberto com `xdg-open` somente depois que o Django responder.
+
+A restauração usa `zenity` para escolher o ZIP quando disponível; sem `zenity`, solicita o caminho no terminal.
+
+### Backup
+
+Os backups são gravados em:
+
+```text
+~/Segundo Cerebro Backups
+```
+
+Cada ZIP contém uma cópia consistente do `db.sqlite3`, a pasta `media/` quando existir e um arquivo de orientação. São mantidos os 30 backups mais recentes.
+
+O `.env` não entra no backup porque pode conter chaves de API. Guarde-o separadamente em local seguro.
+
 ## Transcrição de Instagram e YouTube
 
 Crie um arquivo `.env` na raiz do projeto:
