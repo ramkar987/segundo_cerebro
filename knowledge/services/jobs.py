@@ -4,6 +4,11 @@ from django.utils import timezone
 
 from ..models import Item, ProcessingJob
 from .extractors import extract_video_metadata, extract_webpage
+from .transcription import (
+    TranscriptionSkipped,
+    mark_transcription_state,
+    transcribe_item,
+)
 
 
 def claim_next_job():
@@ -44,6 +49,20 @@ def _useful_instagram_title(raw_title: str, caption: str) -> str:
     return 'Instagram'
 
 
+def _try_transcription(item: Item) -> None:
+    if not settings.TRANSCRIBE_MEDIA:
+        return
+
+    try:
+        transcribe_item(item)
+    except TranscriptionSkipped as exc:
+        mark_transcription_state(item, 'skipped', str(exc))
+    except Exception as exc:
+        # Metadados/legenda continuam válidos mesmo que o provedor de
+        # transcrição esteja indisponível. Registramos o erro para nova tentativa.
+        mark_transcription_state(item, 'error', str(exc))
+
+
 def process_job(job: ProcessingJob):
     item = job.item
     try:
@@ -68,6 +87,8 @@ def process_job(job: ProcessingJob):
             source.original_hashtags = data['hashtags']
             source.metadata = data['metadata']
             source.save()
+
+            _try_transcription(item)
 
         elif item.type == Item.Type.WEB:
             data = extract_webpage(item.source_url, timeout=settings.WEB_FETCH_TIMEOUT)
