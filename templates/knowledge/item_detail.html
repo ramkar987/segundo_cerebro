@@ -30,6 +30,9 @@
         {% for topic in item.topics.all %}
           <span class="badge">Assunto: {{ topic.name }}</span>
         {% endfor %}
+        {% if item.analysis.subtopic %}
+          <span class="badge">Subassunto: {{ item.analysis.subtopic }}</span>
+        {% endif %}
         {% for tag in item.tags.all %}
           <span class="badge">{{ tag.name }}</span>
         {% endfor %}
