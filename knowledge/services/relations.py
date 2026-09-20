@@ -40,6 +40,8 @@ Tipos permitidos:
 - reference: um serve como referência prática para compreender/aplicar o outro.
 
 Regras:
+- responda sempre em português do Brasil;
+- explanation deve ser escrita em português do Brasil, de forma curta e natural;
 - retorne no máximo 5 relações;
 - confiança entre 0 e 1;
 - só inclua confiança >= 0.65;
