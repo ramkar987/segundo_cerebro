@@ -7,6 +7,7 @@ urlpatterns = [
     path('item/<int:pk>/', views.item_detail, name='item_detail'),
     path('item/<int:pk>/progresso/', views.item_progress, name='item_progress'),
     path('item/<int:pk>/favorito/', views.toggle_favorite, name='toggle_favorite'),
+    path('item/<int:pk>/tentar-novamente/', views.retry_item, name='retry_item'),
     path('relacao/<int:pk>/confirmar/', views.confirm_relation, name='confirm_relation'),
     path('relacao/<int:pk>/rejeitar/', views.reject_relation, name='reject_relation'),
     path('conexoes/', views.connections, name='connections'),
