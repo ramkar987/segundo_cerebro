@@ -243,6 +243,7 @@ def item_progress(request, pk):
     return JsonResponse({
         'id': item.id,
         'title': item.title or 'Sem título',
+        'summary': (item.summary or item.content or '')[:180],
         'type_label': item.get_type_display(),
         'status': item.status,
         'status_label': item.get_status_display(),
