@@ -1,5 +1,6 @@
 from django.test import TestCase, override_settings
 
+from .forms import BatchCaptureForm
 from .models import Item, ProcessingJob
 from .services.capture import DuplicateCapture, create_capture
 from .services.detector import detect_capture
@@ -122,4 +123,67 @@ class CaptureTests(TestCase):
                 'example.com/artigo?fbclid=abc&id=7'
             )
         self.assertEqual(ctx.exception.item.pk, first.pk)
+        self.assertEqual(Item.objects.count(), 1)
+
+
+
+class BatchCaptureFormTests(TestCase):
+    def test_accepts_numbered_and_bulleted_links(self):
+        form = BatchCaptureForm({
+            'batch_capture': (
+                '1. https://example.com/a\n'
+                '• www.instagram.com/p/ABC/\n'
+                '- https://youtu.be/xyz'
+            )
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(
+            form.cleaned_data['batch_capture'],
+            [
+                'https://example.com/a',
+                'www.instagram.com/p/ABC/',
+                'https://youtu.be/xyz',
+            ],
+        )
+
+    def test_limits_batch_to_100_lines(self):
+        form = BatchCaptureForm({
+            'batch_capture': '\n'.join(
+                f'https://example.com/{index}'
+                for index in range(101)
+            )
+        })
+        self.assertFalse(form.is_valid())
+
+
+class BatchCaptureViewTests(TestCase):
+    def test_batch_creates_valid_links_and_ignores_duplicate_and_text(self):
+        response = self.client.post(
+            '/',
+            {
+                'mode': 'batch',
+                'batch_capture': (
+                    'https://example.com/a\n'
+                    'https://example.com/a\n'
+                    'isto não é um link'
+                ),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/')
+        self.assertEqual(Item.objects.count(), 1)
+        self.assertEqual(ProcessingJob.objects.count(), 1)
+
+    def test_save_and_add_another_returns_to_capture(self):
+        response = self.client.post(
+            '/',
+            {
+                'mode': 'single',
+                'capture': 'https://example.com/novo',
+                'title': '',
+                'action': 'save_add_another',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/')
         self.assertEqual(Item.objects.count(), 1)
