@@ -84,10 +84,25 @@
 
   <div class="relations big">
     {% for relation in confirmed_relations %}
-      <div class="relation-row">
-        <a href="{{ relation.source.get_absolute_url }}">{{ relation.source.title }}</a>
-        <span>{{ relation.get_relation_type_display }}</span>
-        <a href="{{ relation.target.get_absolute_url }}">{{ relation.target.title }}</a>
+      <div class="relation-card">
+        <div class="relation-pair">
+          <a href="{{ relation.source.get_absolute_url }}"><strong>{{ relation.source.title }}</strong></a>
+          <span class="relation-type">{{ relation.get_relation_type_display }}</span>
+          <a href="{{ relation.target.get_absolute_url }}"><strong>{{ relation.target.title }}</strong></a>
+        </div>
+        {% if relation.explanation %}
+          <p class="muted">{{ relation.explanation }}</p>
+        {% endif %}
+        <div class="relation-actions">
+          <form method="post" action="{% url 'unconfirm_relation' relation.pk %}">
+            {% csrf_token %}
+            <button type="submit">↶ Desfazer confirmação</button>
+          </form>
+          <form method="post" action="{% url 'reject_relation' relation.pk %}">
+            {% csrf_token %}
+            <button type="submit">✕ Rejeitar relação</button>
+          </form>
+        </div>
       </div>
     {% empty %}
       <div class="empty">Nenhuma relação confirmada ainda.</div>
