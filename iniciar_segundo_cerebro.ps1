@@ -87,12 +87,31 @@ if (Get-Command wt.exe -ErrorAction SilentlyContinue) {
     )
 }
 
-Write-Host "Aguardando o servidor iniciar..." -ForegroundColor Yellow
-Start-Sleep -Seconds 2
-
 $url = "http://127.0.0.1:8000/"
-Write-Host "Abrindo $url" -ForegroundColor Cyan
-Start-Process $url
+Write-Host "Aguardando o servidor ficar pronto..." -ForegroundColor Yellow
+
+$serverReady = $false
+for ($i = 1; $i -le 30; $i++) {
+    try {
+        $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 1
+        if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+            $serverReady = $true
+            break
+        }
+    }
+    catch {
+        Start-Sleep -Milliseconds 500
+    }
+}
+
+if ($serverReady) {
+    Write-Host "Servidor pronto. Abrindo $url" -ForegroundColor Cyan
+    Start-Process $url
+}
+else {
+    Write-Host "O servidor ainda nao respondeu apos a espera." -ForegroundColor Red
+    Write-Host "Verifique a aba 'Segundo Cerebro - Site'." -ForegroundColor Yellow
+}
 
 Write-Host ""
 Write-Host "Pronto." -ForegroundColor Green
