@@ -1,27 +1,63 @@
 import time
+
 from django.core.management.base import BaseCommand
+
+from knowledge.models import ProcessingJob
 from knowledge.services.jobs import claim_next_job, process_job
+
 
 class Command(BaseCommand):
     help = 'Processa continuamente a fila de capturas sem depender de Redis/Celery.'
 
     def add_arguments(self, parser):
-        parser.add_argument('--once', action='store_true', help='Processa no máximo um job e encerra.')
-        parser.add_argument('--sleep', type=float, default=2.0, help='Segundos entre verificações quando a fila está vazia.')
+        parser.add_argument(
+            '--once',
+            action='store_true',
+            help='Processa no máximo um job e encerra.',
+        )
+        parser.add_argument(
+            '--sleep',
+            type=float,
+            default=2.0,
+            help='Segundos entre verificações quando a fila está vazia.',
+        )
 
     def handle(self, *args, **options):
+        # Nesta V1 usamos um único worker. Se ele foi interrompido no meio de
+        # um job, recuperamos automaticamente a fila na reinicialização.
+        recovered = ProcessingJob.objects.filter(
+            state=ProcessingJob.State.RUNNING
+        ).update(
+            state=ProcessingJob.State.PENDING,
+            started_at=None,
+        )
+        if recovered:
+            self.stdout.write(
+                self.style.WARNING(
+                    f'{recovered} job(s) interrompido(s) devolvido(s) à fila.'
+                )
+            )
+
         while True:
             job = claim_next_job()
             if job:
-                self.stdout.write(f'Processando job {job.pk} / item {job.item_id}...')
+                self.stdout.write(
+                    f'Processando job {job.pk} / item {job.item_id} '
+                    f'({job.get_kind_display()})...'
+                )
                 try:
                     process_job(job)
-                    self.stdout.write(self.style.SUCCESS(f'Job {job.pk} concluído.'))
+                    self.stdout.write(
+                        self.style.SUCCESS(f'Job {job.pk} concluído.')
+                    )
                 except Exception as exc:
-                    self.stderr.write(self.style.ERROR(f'Job {job.pk} falhou: {exc}'))
+                    self.stderr.write(
+                        self.style.ERROR(f'Job {job.pk} falhou: {exc}')
+                    )
             elif options['once']:
                 return
             else:
                 time.sleep(options['sleep'])
+
             if options['once']:
                 return
