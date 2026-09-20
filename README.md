@@ -9,6 +9,7 @@ Uma reconstrução do conceito de “segundo cérebro” como aplicação web Dj
 - biblioteca com pesquisa e filtros por tipo/status/favorito;
 - item detalhado com retorno à fonte original;
 - Instagram preserva legenda, hashtags e metadados separadamente;
+- posts e carrosséis de imagens do Instagram podem ter o texto dos slides lido por IA visual;
 - transcrição opcional de Instagram/YouTube via Groq Whisper;
 - análise automática com IA: essência, diferenças legenda/fala, insights, assunto e tags;
 - timestamps da fala armazenados como chunks pesquisáveis;
@@ -127,11 +128,15 @@ GROQ_API_KEY=sua-chave-aqui
 GROQ_WHISPER_MODEL=whisper-large-v3-turbo
 TRANSCRIBE_MEDIA=1
 TRANSCRIPTION_LANGUAGE=pt
+GROQ_VISION_MODEL=qwen/qwen3.8-27b
+ANALYZE_IMAGES=1
 GROQ_CHAT_MODEL=openai/gpt-oss-20b
 ANALYZE_CONTENT=1
 ```
 
-Novas capturas de Instagram/YouTube serão transcritas automaticamente pelo worker.
+Novas capturas de vídeo do Instagram/YouTube serão transcritas automaticamente pelo worker.
+
+Posts e carrosséis de imagens do Instagram usam Instaloader para obter os slides e o modelo visual da Groq para extrair o texto visível. Legenda e texto dos slides permanecem separados para a análise.
 
 Para completar mídias que já estavam cadastradas antes da transcrição existir:
 
