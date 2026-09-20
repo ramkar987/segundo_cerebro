@@ -22,6 +22,7 @@ def home(request):
             messages.warning(
                 request,
                 'Este conteúdo já foi guardado. Abrindo o item existente.',
+                extra_tags='duplicate-warning',
             )
             return redirect(item)
 
