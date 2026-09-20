@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib import messages
 from django.db.models import Q
 from django.http import HttpResponseRedirect, JsonResponse
@@ -25,6 +27,7 @@ def home(request):
         invalid_count = 0
         error_count = 0
         created_ids = []
+        batch_id = uuid.uuid4().hex
 
         for raw in batch_form.cleaned_data['batch_capture']:
             detection = detect_capture(raw)
@@ -33,7 +36,11 @@ def home(request):
                 continue
 
             try:
-                item = create_capture(raw)
+                item = create_capture(
+                    raw,
+                    capture_mode='batch',
+                    batch_id=batch_id,
+                )
                 created_count += 1
                 created_ids.append(item.pk)
             except DuplicateCapture:
@@ -73,6 +80,7 @@ def home(request):
             item = create_capture(
                 form.cleaned_data['capture'],
                 form.cleaned_data['title'],
+                capture_mode='individual',
             )
         except DuplicateCapture as duplicate:
             item = duplicate.item
@@ -114,20 +122,30 @@ def home(request):
     if batch_ids:
         found = {
             item.pk: item
-            for item in Item.objects.filter(pk__in=batch_ids)
+            for item in Item.objects.select_related('source').filter(pk__in=batch_ids)
         }
+
+        # Compatibilidade com lotes criados imediatamente antes desta versão:
+        # marca a origem sem exigir que o usuário reenvie os links.
+        for item_id in batch_ids:
+            item = found.get(item_id)
+            if not item:
+                continue
+            metadata = dict(item.source.metadata or {})
+            if not metadata.get('capture_mode'):
+                metadata['capture_mode'] = 'batch'
+                item.source.metadata = metadata
+                item.source.save(update_fields=['metadata'])
+
         batch_items = [
             found[item_id]
             for item_id in batch_ids
             if item_id in found
+            and found[item_id].status == Item.Status.PROCESSING
         ]
-    else:
-        # Compatibilidade para itens colocados na fila antes do painel de lote:
-        # se ainda estiverem processando, eles aparecem automaticamente.
-        batch_items = list(
-            Item.objects.filter(status=Item.Status.PROCESSING)
-            .order_by('-created_at')[:100]
-        )
+
+        if not batch_items:
+            request.session.pop('last_batch_ids', None)
 
     return render(
         request,
