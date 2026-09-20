@@ -26,7 +26,6 @@
     <section class="detail-section">
       <p class="eyebrow">ESSÊNCIA</p>
       <div class="prose">{{ item.summary|linebreaks }}</div>
-
       <div class="card-meta">
         {% for topic in item.topics.all %}
           <span class="badge">Assunto: {{ topic.name }}</span>
@@ -38,101 +37,61 @@
     </section>
   {% endif %}
 
-  {% if item.analysis %}
-    {% if item.analysis.video_explains or item.analysis.caption_adds or item.analysis.common_points %}
-      <section class="detail-section">
-        <p class="eyebrow">ANÁLISE DA IA</p>
-        <div class="grid">
-          {% if item.analysis.video_explains %}
-            <div class="item-card">
-              <h3>🎙 O vídeo explica</h3>
-              <ul>
-                {% for point in item.analysis.video_explains %}<li>{{ point }}</li>{% endfor %}
-              </ul>
-            </div>
-          {% endif %}
-
-          {% if item.analysis.caption_adds %}
-            <div class="item-card">
-              <h3>📝 A legenda acrescenta</h3>
-              <ul>
-                {% for point in item.analysis.caption_adds %}<li>{{ point }}</li>{% endfor %}
-              </ul>
-            </div>
-          {% endif %}
-
-          {% if item.analysis.common_points %}
-            <div class="item-card">
-              <h3>↔ Em comum</h3>
-              <ul>
-                {% for point in item.analysis.common_points %}<li>{{ point }}</li>{% endfor %}
-              </ul>
-            </div>
-          {% endif %}
-        </div>
-      </section>
-    {% endif %}
-
-    {% if item.analysis.insights or item.analysis.why_keep %}
-      <section class="detail-section">
-        <p class="eyebrow">O QUE VALE GUARDAR</p>
-        {% if item.analysis.insights %}
-          <ul class="prose">
-            {% for point in item.analysis.insights %}<li>{{ point }}</li>{% endfor %}
-          </ul>
-        {% endif %}
-        {% if item.analysis.why_keep %}
-          <p><strong>Por que guardar:</strong> {{ item.analysis.why_keep }}</p>
-        {% endif %}
-      </section>
-    {% endif %}
-  {% endif %}
-
-  {% if show_content %}
+  {% if item.analysis.insights or item.analysis.why_keep %}
     <section class="detail-section">
-      <p class="eyebrow">CONTEÚDO</p>
-      <div class="prose">{{ item.content|linebreaks }}</div>
-    </section>
-  {% endif %}
-
-  {% if item.source.caption and item.type == 'instagram' %}
-    <section class="detail-section">
-      <p class="eyebrow">LEGENDA DO INSTAGRAM</p>
-      <div class="prose">{{ item.source.caption|linebreaks }}</div>
-    </section>
-  {% endif %}
-
-  {% if item.source.original_hashtags %}
-    <section class="detail-section">
-      <p class="eyebrow">HASHTAGS ORIGINAIS</p>
-      <div class="card-meta">
-        {% for tag in item.source.original_hashtags %}
-          <span class="badge">#{{ tag }}</span>
-        {% endfor %}
-      </div>
-    </section>
-  {% endif %}
-
-  {% if item.source.transcript %}
-    <section class="detail-section">
-      <p class="eyebrow">TRANSCRIÇÃO</p>
-      <div class="prose">{{ item.source.transcript|linebreaks }}</div>
-
-      {% if item.chunks.all %}
-        <details class="transcript-timestamps">
-          <summary>Ver trechos com timestamps</summary>
-          <div class="relations">
-            {% for chunk in item.chunks.all %}
-              {% if chunk.kind == 'transcript' %}
-                <div class="relation-row">
-                  <span>{{ chunk.start_seconds|timecode }}{% if chunk.end_seconds %}–{{ chunk.end_seconds|timecode }}{% endif %}</span>
-                  <div>{{ chunk.text }}</div>
-                </div>
-              {% endif %}
-            {% endfor %}
-          </div>
-        </details>
+      <p class="eyebrow">O QUE VALE GUARDAR</p>
+      {% if item.analysis.insights %}
+        <ul class="prose">
+          {% for point in item.analysis.insights %}<li>{{ point }}</li>{% endfor %}
+        </ul>
       {% endif %}
+      {% if item.analysis.why_keep %}
+        <p><strong>Por que guardar:</strong> {{ item.analysis.why_keep }}</p>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  {% if item.analysis.claims_to_verify %}
+    <section class="detail-section">
+      <p class="eyebrow">⚠️ VALE CONFERIR</p>
+      <p class="muted">Estas são afirmações da fonte que podem mudar ou precisam ser verificadas antes de agir.</p>
+      <ul class="prose">
+        {% for point in item.analysis.claims_to_verify %}<li>{{ point }}</li>{% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  {% if item.analysis.video_explains or item.analysis.caption_adds or item.analysis.common_points %}
+    <section class="detail-section">
+      <p class="eyebrow">LEGENDA × FALA</p>
+      <div class="grid">
+        {% if item.analysis.video_explains %}
+          <div class="item-card">
+            <h3>🎙 Só no vídeo</h3>
+            <ul>
+              {% for point in item.analysis.video_explains %}<li>{{ point }}</li>{% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        {% if item.analysis.caption_adds %}
+          <div class="item-card">
+            <h3>📝 Só na legenda</h3>
+            <ul>
+              {% for point in item.analysis.caption_adds %}<li>{{ point }}</li>{% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        {% if item.analysis.common_points %}
+          <div class="item-card">
+            <h3>↔ Nos dois</h3>
+            <ul>
+              {% for point in item.analysis.common_points %}<li>{{ point }}</li>{% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+      </div>
     </section>
   {% endif %}
 
@@ -155,5 +114,59 @@
       {% endfor %}
     </div>
   </section>
+
+  {% if show_content or item.source.caption or item.source.transcript or item.source.original_hashtags %}
+    <section class="detail-section">
+      <p class="eyebrow">MATERIAL ORIGINAL</p>
+
+      {% if show_content %}
+        <details>
+          <summary>Ver conteúdo original</summary>
+          <div class="prose">{{ item.content|linebreaks }}</div>
+        </details>
+      {% endif %}
+
+      {% if item.source.caption and item.type == 'instagram' %}
+        <details>
+          <summary>Ver legenda do Instagram</summary>
+          <div class="prose">{{ item.source.caption|linebreaks }}</div>
+        </details>
+      {% endif %}
+
+      {% if item.source.original_hashtags %}
+        <details>
+          <summary>Ver hashtags originais</summary>
+          <div class="card-meta">
+            {% for tag in item.source.original_hashtags %}
+              <span class="badge">#{{ tag }}</span>
+            {% endfor %}
+          </div>
+        </details>
+      {% endif %}
+
+      {% if item.source.transcript %}
+        <details>
+          <summary>Ver transcrição completa</summary>
+          <div class="prose">{{ item.source.transcript|linebreaks }}</div>
+        </details>
+
+        {% if item.chunks.all %}
+          <details class="transcript-timestamps">
+            <summary>Ver trechos com timestamps</summary>
+            <div class="relations">
+              {% for chunk in item.chunks.all %}
+                {% if chunk.kind == 'transcript' %}
+                  <div class="relation-row">
+                    <span>{{ chunk.start_seconds|timecode }}{% if chunk.end_seconds %}–{{ chunk.end_seconds|timecode }}{% endif %}</span>
+                    <div>{{ chunk.text }}</div>
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </details>
+        {% endif %}
+      {% endif %}
+    </section>
+  {% endif %}
 </article>
 {% endblock %}
