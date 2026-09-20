@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load timecode %}
 {% block title %}{{ item.title|default:'Item' }} · Segundo Cérebro{% endblock %}
 {% block content %}
 <article>
@@ -57,6 +58,22 @@
     <section class="detail-section">
       <p class="eyebrow">TRANSCRIÇÃO</p>
       <div class="prose">{{ item.source.transcript|linebreaks }}</div>
+
+      {% if item.chunks.all %}
+        <details class="transcript-timestamps">
+          <summary>Ver trechos com timestamps</summary>
+          <div class="relations">
+            {% for chunk in item.chunks.all %}
+              {% if chunk.kind == 'transcript' %}
+                <div class="relation-row">
+                  <span>{{ chunk.start_seconds|timecode }}{% if chunk.end_seconds %}–{{ chunk.end_seconds|timecode }}{% endif %}</span>
+                  <div>{{ chunk.text }}</div>
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </details>
+      {% endif %}
     </section>
   {% endif %}
 
