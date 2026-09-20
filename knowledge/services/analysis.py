@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import requests
 from django.conf import settings
@@ -16,29 +17,35 @@ SYSTEM_PROMPT = """Você organiza um Segundo Cérebro pessoal.
 Analise somente o material fornecido. Não use conhecimento externo para completar lacunas e não invente fatos.
 
 REGRAS DE PROVENIÊNCIA:
-- caption = texto escrito na legenda da publicação;
+- caption = texto semântico da legenda, já sem hashtags decorativas;
 - transcript = fala transcrita do vídeo;
 - content = conteúdo principal para notas/páginas sem vídeo.
 Quando caption e transcript existirem, compare-os de forma estrita:
-- video_explains: somente informações que aparecem na transcrição e NÃO aparecem na legenda;
-- caption_adds: somente informações que aparecem na legenda e NÃO aparecem na transcrição;
-- common_points: somente informações realmente presentes nas DUAS fontes.
-Nunca coloque em common_points algo que apareça em apenas uma das fontes.
-Se uma categoria não tiver conteúdo exclusivo, retorne [].
+- video_explains: somente informações que aparecem na transcrição e NÃO aparecem semanticamente na legenda;
+- caption_adds: somente informações que aparecem semanticamente na legenda e NÃO aparecem na transcrição;
+- common_points: somente ideias realmente expressas nas DUAS fontes.
+Não transforme uma ideia presente só em uma das fontes em "ponto em comum" por inferência.
+Se uma categoria não tiver conteúdo real, retorne [].
+Não trate hashtags, emojis ou palavras-chave soltas como conteúdo adicional da legenda.
 
 REGRAS DE CONFIABILIDADE:
 - Você está organizando o que A FONTE AFIRMA, não verificando se é verdade.
 - Não apresente alegações sobre gratuidade, preços, elegibilidade, benefícios, disponibilidade, segurança ou regras de serviços como fatos confirmados.
 - summary deve usar formulações como "O conteúdo apresenta...", "O autor afirma..." ou equivalentes quando houver alegações não verificadas.
 - claims_to_verify deve listar afirmações concretas que fariam diferença prática e deveriam ser conferidas na fonte oficial antes de o usuário agir.
-- Não crie claims_to_verify para opiniões triviais ou informações sem consequência prática.
+- Não repita claims_to_verify em insights como se fossem fatos.
+- insights devem ser abstrações úteis e prudentes, sem validar promessas não verificadas.
 
 ORGANIZAÇÃO:
 - topic deve ser uma categoria ampla, reutilizável e estável, idealmente 1 a 3 palavras.
 - Não use uma frase específica como assunto. Ex.: prefira "Inteligência Artificial" a "Acesso gratuito a IA com e-mail educacional".
 - detalhes específicos devem ir para tags.
 - tags devem ser curtas, úteis para busca e sem duplicar desnecessariamente o topic.
-- insights devem capturar o que vale lembrar, sem repetir literalmente video_explains/caption_adds/common_points.
+- video_explains: no máximo 6 itens.
+- caption_adds: no máximo 4 itens.
+- common_points: no máximo 4 itens.
+- insights: no máximo 4 itens.
+- claims_to_verify: no máximo 6 itens.
 - why_keep deve explicar em uma frase por que este item merece existir no Segundo Cérebro.
 
 Responda sempre em português do Brasil.
@@ -74,13 +81,27 @@ def _list_of_strings(value, limit: int = 10) -> list[str]:
     return result
 
 
+def _semantic_caption(raw: str) -> str:
+    """Remove hashtags/linhas decorativas só para a análise, preservando o original no banco."""
+    cleaned_lines = []
+    for raw_line in (raw or '').splitlines():
+        line = re.sub(r'(?<!\w)#[\wÀ-ÿ_]+', '', raw_line)
+        line = ' '.join(line.split()).strip()
+        if not line:
+            continue
+        if not re.search(r'[A-Za-zÀ-ÿ0-9]', line):
+            continue
+        cleaned_lines.append(line)
+    return '\n'.join(cleaned_lines)
+
+
 def _analysis_payload(item: Item) -> dict:
     source = item.source
     return {
         'type': item.type,
         'title': item.title,
         'content': item.content,
-        'caption': source.caption,
+        'caption': _semantic_caption(source.caption),
         'transcript': source.transcript,
         'source_author': item.source_author,
         'source_url': item.source_url,
@@ -115,7 +136,7 @@ def _call_groq(item: Item) -> dict:
             'response_format': {'type': 'json_object'},
             'reasoning_effort': 'low',
             'temperature': 0.1,
-            'max_completion_tokens': 2000,
+            'max_completion_tokens': 1800,
         },
         timeout=settings.AI_TIMEOUT,
     )
@@ -131,12 +152,12 @@ def _call_groq(item: Item) -> dict:
 
     return {
         'summary': _text(data.get('summary')),
-        'video_explains': _list_of_strings(data.get('video_explains')),
-        'caption_adds': _list_of_strings(data.get('caption_adds')),
-        'common_points': _list_of_strings(data.get('common_points')),
-        'insights': _list_of_strings(data.get('insights')),
+        'video_explains': _list_of_strings(data.get('video_explains'), limit=6),
+        'caption_adds': _list_of_strings(data.get('caption_adds'), limit=4),
+        'common_points': _list_of_strings(data.get('common_points'), limit=4),
+        'insights': _list_of_strings(data.get('insights'), limit=4),
         'why_keep': _text(data.get('why_keep')),
-        'claims_to_verify': _list_of_strings(data.get('claims_to_verify'), limit=8),
+        'claims_to_verify': _list_of_strings(data.get('claims_to_verify'), limit=6),
         'topic': _text(data.get('topic'))[:120],
         'tags': [t[:80] for t in _list_of_strings(data.get('tags'), limit=10)],
         'model': settings.GROQ_CHAT_MODEL,
