@@ -332,6 +332,17 @@ def confirm_relation(request, pk):
 
 
 @require_POST
+def unconfirm_relation(request, pk):
+    relation = get_object_or_404(Relation, pk=pk)
+    relation.status = Relation.Status.SUGGESTED
+    relation.save(update_fields=['status'])
+    messages.info(request, 'Confirmação desfeita. A relação voltou para sugestões.')
+    return HttpResponseRedirect(
+        request.META.get('HTTP_REFERER') or relation.source.get_absolute_url()
+    )
+
+
+@require_POST
 def reject_relation(request, pk):
     relation = get_object_or_404(Relation, pk=pk)
     relation.status = Relation.Status.REJECTED
