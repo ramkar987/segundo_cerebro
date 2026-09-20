@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 
 import requests
 from django.conf import settings
@@ -11,6 +12,26 @@ from ..models import Item, Tag, Topic
 
 class AnalysisSkipped(Exception):
     """Análise pulada sem invalidar o item capturado."""
+
+
+BROAD_TOPICS = [
+    'Inteligência Artificial',
+    'Tecnologia',
+    'Programação',
+    'Dados',
+    'Finanças',
+    'Saúde',
+    'Educação',
+    'Trabalho',
+    'Produtividade',
+    'Jurídico',
+    'Viagens',
+    'Casa',
+    'Veículos',
+    'Família',
+    'Entretenimento',
+    'Outros',
+]
 
 
 SYSTEM_PROMPT = """Você organiza um Segundo Cérebro pessoal.
@@ -32,21 +53,24 @@ REGRAS DE CONFIABILIDADE:
 - Você está organizando o que A FONTE AFIRMA, não verificando se é verdade.
 - Não apresente alegações sobre gratuidade, preços, elegibilidade, benefícios, disponibilidade, segurança ou regras de serviços como fatos confirmados.
 - summary deve usar formulações como "O conteúdo apresenta...", "O autor afirma..." ou equivalentes quando houver alegações não verificadas.
-- claims_to_verify deve listar afirmações concretas que fariam diferença prática e deveriam ser conferidas na fonte oficial antes de o usuário agir.
-- Não repita claims_to_verify em insights como se fossem fatos.
-- insights devem ser abstrações úteis e prudentes, sem validar promessas não verificadas.
+- claims_to_verify deve conter apenas alegações concretas feitas pela fonte que fariam diferença prática e deveriam ser verificadas antes de agir.
+- insights deve conter apenas conclusões diretamente sustentadas pelo material; NÃO acrescente riscos, conselhos, implicações legais, segurança, ética ou termos de serviço se isso não estiver explicitamente no material.
+- Para CADA insight e claim_to_verify forneça evidence: um pequeno trecho LITERAL copiado de caption, transcript ou content que sustente aquele ponto.
+- Se não houver um trecho literal que sustente o ponto, NÃO inclua o ponto.
+- why_keep é meta-organização: explique por que vale manter o item, sem validar a veracidade das alegações.
 
 ORGANIZAÇÃO:
-- topic deve ser uma categoria ampla, reutilizável e estável, idealmente 1 a 3 palavras.
-- Não use uma frase específica como assunto. Ex.: prefira "Inteligência Artificial" a "Acesso gratuito a IA com e-mail educacional".
-- detalhes específicos devem ir para tags.
-- tags devem ser curtas, úteis para busca e sem duplicar desnecessariamente o topic.
+- topic DEVE ser exatamente uma destas categorias:
+  Inteligência Artificial, Tecnologia, Programação, Dados, Finanças, Saúde, Educação, Trabalho, Produtividade, Jurídico, Viagens, Casa, Veículos, Família, Entretenimento, Outros.
+- subtopic deve ser curto, específico e reutilizável, com 1 a 4 palavras. Ex.: "Benefícios educacionais".
+- detalhes ainda mais específicos vão para tags.
+- tags devem ser curtas, úteis para busca e sem duplicar desnecessariamente topic/subtopic.
 - video_explains: no máximo 6 itens.
 - caption_adds: no máximo 4 itens.
 - common_points: no máximo 4 itens.
 - insights: no máximo 4 itens.
 - claims_to_verify: no máximo 6 itens.
-- why_keep deve explicar em uma frase por que este item merece existir no Segundo Cérebro.
+- why_keep: uma frase.
 
 Responda sempre em português do Brasil.
 Retorne SOMENTE um objeto JSON válido, sem Markdown, com exatamente estas chaves:
@@ -54,10 +78,11 @@ summary: string;
 video_explains: array de strings;
 caption_adds: array de strings;
 common_points: array de strings;
-insights: array de strings;
+insights: array de objetos {"text": string, "evidence": string};
 why_keep: string;
-claims_to_verify: array de strings;
+claims_to_verify: array de objetos {"text": string, "evidence": string};
 topic: string;
+subtopic: string;
 tags: array de 3 a 10 strings.
 
 Para conteúdos sem vídeo, use video_explains, caption_adds e common_points como arrays vazios.
@@ -95,6 +120,43 @@ def _semantic_caption(raw: str) -> str:
     return '\n'.join(cleaned_lines)
 
 
+def _normalize_for_evidence(value: str) -> str:
+    value = unicodedata.normalize('NFKD', value or '')
+    value = ''.join(ch for ch in value if not unicodedata.combining(ch))
+    value = value.lower()
+    value = re.sub(r'[^a-z0-9]+', ' ', value)
+    return ' '.join(value.split())
+
+
+def _validated_points(value, source_text: str, limit: int) -> list[str]:
+    """Aceita apenas pontos cuja evidência literal aparece no material de origem."""
+    if not isinstance(value, list):
+        return []
+
+    source_norm = _normalize_for_evidence(source_text)
+    result = []
+
+    for entry in value:
+        if not isinstance(entry, dict):
+            continue
+
+        text = _text(entry.get('text'))
+        evidence = _text(entry.get('evidence'))
+        evidence_norm = _normalize_for_evidence(evidence)
+
+        # Exige uma evidência minimamente informativa e realmente presente na fonte.
+        if not text or len(evidence_norm) < 8:
+            continue
+        if evidence_norm not in source_norm:
+            continue
+        if text not in result:
+            result.append(text)
+        if len(result) >= limit:
+            break
+
+    return result
+
+
 def _analysis_payload(item: Item) -> dict:
     source = item.source
     return {
@@ -106,6 +168,14 @@ def _analysis_payload(item: Item) -> dict:
         'source_author': item.source_author,
         'source_url': item.source_url,
     }
+
+
+def _safe_topic(value: str) -> str:
+    requested = _text(value)
+    for topic in BROAD_TOPICS:
+        if requested.casefold() == topic.casefold():
+            return topic
+    return 'Outros'
 
 
 def _call_groq(item: Item) -> dict:
@@ -136,7 +206,7 @@ def _call_groq(item: Item) -> dict:
             'response_format': {'type': 'json_object'},
             'reasoning_effort': 'low',
             'temperature': 0.1,
-            'max_completion_tokens': 1800,
+            'max_completion_tokens': 2000,
         },
         timeout=settings.AI_TIMEOUT,
     )
@@ -150,15 +220,27 @@ def _call_groq(item: Item) -> dict:
     raw = body['choices'][0]['message']['content']
     data = json.loads(raw)
 
+    source_text = '\n'.join(
+        part for part in (
+            payload.get('content', ''),
+            payload.get('caption', ''),
+            payload.get('transcript', ''),
+        )
+        if part
+    )
+
     return {
         'summary': _text(data.get('summary')),
         'video_explains': _list_of_strings(data.get('video_explains'), limit=6),
         'caption_adds': _list_of_strings(data.get('caption_adds'), limit=4),
         'common_points': _list_of_strings(data.get('common_points'), limit=4),
-        'insights': _list_of_strings(data.get('insights'), limit=4),
+        'insights': _validated_points(data.get('insights'), source_text, limit=4),
         'why_keep': _text(data.get('why_keep')),
-        'claims_to_verify': _list_of_strings(data.get('claims_to_verify'), limit=6),
-        'topic': _text(data.get('topic'))[:120],
+        'claims_to_verify': _validated_points(
+            data.get('claims_to_verify'), source_text, limit=6
+        ),
+        'topic': _safe_topic(data.get('topic')),
+        'subtopic': _text(data.get('subtopic'))[:80],
         'tags': [t[:80] for t in _list_of_strings(data.get('tags'), limit=10)],
         'model': settings.GROQ_CHAT_MODEL,
     }
@@ -186,8 +268,7 @@ def analyze_item(item: Item) -> dict:
     item.topics.clear()
     item.tags.clear()
 
-    if data['topic']:
-        item.topics.add(_get_or_create_topic(data['topic']))
+    item.topics.add(_get_or_create_topic(data['topic']))
 
     for tag_name in data['tags']:
         if tag_name:
