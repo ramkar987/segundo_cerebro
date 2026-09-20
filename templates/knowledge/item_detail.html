@@ -1,13 +1,57 @@
 {% extends 'base.html' %}
 {% load timecode %}
-{% block title %}{{ item.title|default:'Item' }} · Segundo Cérebro{% endblock %}
+{% block title %}{{ item.title|default:'Item' }} · Segundo Cérebro
+{% if item.status == 'processing' %}
+<script>
+(() => {
+  const box = document.getElementById('processing-status');
+  if (!box) return;
+
+  const url = box.dataset.progressUrl;
+  const bar = document.getElementById('processing-progress');
+  const percent = document.getElementById('processing-percent');
+  const stage = document.getElementById('processing-stage');
+  const statusLabel = document.getElementById('item-status-label');
+  let finished = false;
+
+  async function poll() {
+    if (finished) return;
+    try {
+      const response = await fetch(url, {
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+        cache: 'no-store'
+      });
+      if (!response.ok) throw new Error('Falha ao consultar andamento');
+      const data = await response.json();
+
+      bar.value = data.progress;
+      percent.textContent = data.progress + '%';
+      stage.textContent = data.stage || 'Processando...';
+      if (statusLabel) statusLabel.textContent = data.status_label;
+
+      if (data.done) {
+        finished = true;
+        setTimeout(() => window.location.reload(), 600);
+        return;
+      }
+    } catch (error) {
+      stage.textContent = 'Processando...';
+    }
+    setTimeout(poll, 2000);
+  }
+
+  setTimeout(poll, 1000);
+})();
+</script>
+{% endif %}
+{% endblock %}
 {% block content %}
 <article>
   <div class="detail-head">
     <div>
       <div class="card-meta">
         <span class="badge">{{ item.get_type_display }}</span>
-        <span>{{ item.get_status_display }}</span>
+        <span id="item-status-label">{{ item.get_status_display }}</span>
         {% if item.source_author %}<span>por {{ item.source_author }}</span>{% endif %}
       </div>
       <h1>{{ item.title|default:'Sem título' }}</h1>
@@ -20,6 +64,37 @@
 
   {% if item.source_url %}
     <p><a href="{{ item.source_url }}" target="_blank" rel="noopener">Abrir fonte original ↗</a></p>
+  {% endif %}
+
+  {% if item.status == 'processing' %}
+    <section
+      class="processing-card"
+      id="processing-status"
+      data-progress-url="{% url 'item_progress' item.pk %}"
+    >
+      <div class="processing-head">
+        <div>
+          <p class="eyebrow">PROCESSAMENTO</p>
+          <strong id="processing-stage">{{ item.processing_stage|default:'Processando...' }}</strong>
+        </div>
+        <strong id="processing-percent">{{ item.processing_progress }}%</strong>
+      </div>
+
+      <progress
+        id="processing-progress"
+        max="100"
+        value="{{ item.processing_progress }}"
+      >{{ item.processing_progress }}%</progress>
+
+      <div class="processing-steps">
+        <span>Fonte</span>
+        <span>Áudio</span>
+        <span>IA</span>
+        <span>Relações</span>
+        <span>Pronto</span>
+      </div>
+      <p class="muted processing-note">Esta página atualiza o andamento automaticamente.</p>
+    </section>
   {% endif %}
 
   {% if item.summary %}
