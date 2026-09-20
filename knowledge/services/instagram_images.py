@@ -231,33 +231,24 @@ def _vision_batch_groq(batch: list[tuple[int, str]]) -> list[dict]:
 
 
 
+
 def _vision_batch_gemini(batch: list[tuple[int, str]]) -> list[dict]:
     if not settings.GEMINI_API_KEY:
         raise InstagramImageExtractionError('GEMINI_API_KEY não configurada.')
 
-    prompt = (
-        'Transcreva SOMENTE o texto visível nas imagens a seguir. '
-        'Não explique, não resuma e não complete frases por conhecimento externo. '
-        'Preserve a ordem de leitura e os números importantes. '
-        'Cada imagem é um slide de um carrossel. '
-        'Retorne JSON válido no formato '
-        '{"slides":[{"index":1,"text":"texto literal"}]}. '
-        'Se um slide não tiver texto legível, use text vazio.'
-    )
+    index, url = batch[0]
+    data, content_type = _download_image(url)
+    encoded = base64.b64encode(data).decode('ascii')
 
-    parts = [{'text': prompt}]
-    for index, url in batch:
-        data, content_type = _download_image(url)
-        encoded = base64.b64encode(data).decode('ascii')
-        parts.append({'text': f'SLIDE {index}'})
-        parts.append(
-            {
-                'inline_data': {
-                    'mime_type': content_type,
-                    'data': encoded,
-                }
-            }
-        )
+    prompt = (
+        f'Esta imagem é o SLIDE {index}. '
+        'Transcreva SOMENTE o texto visível na imagem. '
+        'Não explique, não resuma e não complete frases por conhecimento externo. '
+        'Preserve a ordem de leitura, nomes próprios, valores, datas e números. '
+        'Retorne JSON válido no formato '
+        f'{{"slides":[{{"index":{index},"text":"texto literal"}}]}}. '
+        'Se não houver texto legível, use text vazio.'
+    )
 
     endpoint = (
         'https://generativelanguage.googleapis.com/v1beta/models/'
@@ -275,8 +266,15 @@ def _vision_batch_gemini(batch: list[tuple[int, str]]) -> list[dict]:
             json={
                 'contents': [
                     {
-                        'role': 'user',
-                        'parts': parts,
+                        'parts': [
+                            {'text': prompt},
+                            {
+                                'inline_data': {
+                                    'mime_type': content_type,
+                                    'data': encoded,
+                                }
+                            },
+                        ]
                     }
                 ],
                 'generationConfig': {
@@ -296,6 +294,7 @@ def _vision_batch_gemini(batch: list[tuple[int, str]]) -> list[dict]:
             wait_seconds = float(retry_after) if retry_after else 10.0
         except (TypeError, ValueError):
             wait_seconds = 10.0
+
         time.sleep(max(2.0, min(wait_seconds, 45.0)))
 
     if response is None or response.status_code >= 400:
@@ -322,68 +321,6 @@ def _vision_batch_gemini(batch: list[tuple[int, str]]) -> list[dict]:
         for part in response_parts
         if isinstance(part, dict)
     ).strip()
-
-    if raw.startswith('```'):
-        raw = re.sub(r'^\`\`\`(?:json)?\s*|\s*\`\`\`    """Extrai texto slide a slide e preserva resultados parciais."""
-    urls = [url for url in image_urls if url][: settings.MAX_INSTAGRAM_IMAGES]
-    if not urls:
-        return '', [], []
-
-    expected = set(range(1, len(urls) + 1))
-    results: dict[int, str] = {}
-    providers: dict[int, str] = {}
-    errors: list[str] = []
-
-    for offset in range(0, len(urls), 1):
-        batch_urls = urls[offset: offset + 1]
-        batch = [
-            (offset + position + 1, url)
-            for position, url in enumerate(batch_urls)
-        ]
-
-        if progress:
-            progress(
-                35 + int((offset / max(len(urls), 1)) * 25),
-                f'Lendo texto dos slides {batch[0][0]}–{batch[-1][0]}',
-            )
-
-        try:
-            batch_result = _vision_batch(batch)
-        except Exception as exc:
-            errors.append(
-                f'Slides {batch[0][0]}–{batch[-1][0]}: {str(exc)[:700]}'
-            )
-            continue
-
-        for entry in batch_result:
-            if not isinstance(entry, dict):
-                continue
-            try:
-                index = int(entry.get('index'))
-            except (TypeError, ValueError):
-                continue
-            if index not in expected:
-                continue
-            text = str(entry.get('text') or '').strip()
-            results[index] = text
-            providers[index] = str(entry.get('_provider') or '')
-
-    details = [
-        {
-            'index': index,
-            'text': results.get(index, ''),
-            'provider': providers.get(index, ''),
-        }
-        for index in range(1, len(urls) + 1)
-    ]
-
-    blocks = [
-        f'[SLIDE {entry["index"]}]\n{entry["text"]}'
-        for entry in details
-        if entry['text']
-    ]
-    return '\n\n'.join(blocks), details, errors
-, '', raw)
 
     try:
         payload = json.loads(raw)
@@ -438,43 +375,47 @@ def extract_visual_text(
 
     expected = set(range(1, len(urls) + 1))
     results: dict[int, str] = {}
+    providers: dict[int, str] = {}
     errors: list[str] = []
 
-    for offset in range(0, len(urls), 1):
-        batch_urls = urls[offset: offset + 1]
-        batch = [
-            (offset + position + 1, url)
-            for position, url in enumerate(batch_urls)
-        ]
+    for offset, url in enumerate(urls):
+        index = offset + 1
+        batch = [(index, url)]
 
         if progress:
             progress(
                 35 + int((offset / max(len(urls), 1)) * 25),
-                f'Lendo texto dos slides {batch[0][0]}–{batch[-1][0]}',
+                f'Lendo texto do slide {index}/{len(urls)}',
             )
 
         try:
             batch_result = _vision_batch(batch)
         except Exception as exc:
-            errors.append(
-                f'Slides {batch[0][0]}–{batch[-1][0]}: {str(exc)[:700]}'
-            )
+            errors.append(f'Slide {index}: {str(exc)[:900]}')
             continue
 
         for entry in batch_result:
             if not isinstance(entry, dict):
                 continue
+
             try:
-                index = int(entry.get('index'))
+                returned_index = int(entry.get('index'))
             except (TypeError, ValueError):
                 continue
-            if index not in expected:
+
+            if returned_index not in expected:
                 continue
+
             text = str(entry.get('text') or '').strip()
-            results[index] = text
+            results[returned_index] = text
+            providers[returned_index] = str(entry.get('_provider') or '')
 
     details = [
-        {'index': index, 'text': results.get(index, '')}
+        {
+            'index': index,
+            'text': results.get(index, ''),
+            'provider': providers.get(index, ''),
+        }
         for index in range(1, len(urls) + 1)
     ]
 
