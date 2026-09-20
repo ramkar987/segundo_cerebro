@@ -10,6 +10,7 @@ Uma reconstrução do conceito de “segundo cérebro” como aplicação web Dj
 - item detalhado com retorno à fonte original;
 - Instagram preserva legenda, hashtags e metadados separadamente;
 - transcrição opcional de Instagram/YouTube via Groq Whisper;
+- análise automática com IA: essência, diferenças legenda/fala, insights, assunto e tags;
 - timestamps da fala armazenados como chunks pesquisáveis;
 - fila persistente de processamento no próprio banco, sem exigir Redis/Celery;
 - worker separado (`process_jobs`) para não bloquear a página;
@@ -50,6 +51,8 @@ GROQ_API_KEY=sua-chave-aqui
 GROQ_WHISPER_MODEL=whisper-large-v3-turbo
 TRANSCRIBE_MEDIA=1
 TRANSCRIPTION_LANGUAGE=pt
+GROQ_CHAT_MODEL=openai/gpt-oss-20b
+ANALYZE_CONTENT=1
 ```
 
 Novas capturas de Instagram/YouTube serão transcritas automaticamente pelo worker.
@@ -70,6 +73,18 @@ Para retranscrever:
 
 ```bash
 python manage.py transcribe_media --item 3 --force
+```
+
+Para analisar com IA os itens já cadastrados:
+
+```bash
+python manage.py analyze_content
+```
+
+Ou um item específico:
+
+```bash
+python manage.py analyze_content --item 3
 ```
 
 Legenda e transcrição ficam em campos diferentes. Os segmentos da transcrição guardam início e fim em segundos para futuras citações exatas.
@@ -115,8 +130,7 @@ Worker process_jobs
 
 ## Próximos marcos
 
-1. Resumo, tags e assuntos automáticos.
-2. Chunking também de legenda, web e PDF.
+1. Chunking também de legenda, web e PDF.
 3. Embeddings e busca híbrida.
 4. RAG com citação de trecho exato.
 5. Sugestões automáticas de relações.
