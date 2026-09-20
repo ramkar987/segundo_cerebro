@@ -1,50 +1,6 @@
 {% extends 'base.html' %}
 {% load timecode %}
-{% block title %}{{ item.title|default:'Item' }} · Segundo Cérebro
-{% if item.status == 'processing' %}
-<script>
-(() => {
-  const box = document.getElementById('processing-status');
-  if (!box) return;
-
-  const url = box.dataset.progressUrl;
-  const bar = document.getElementById('processing-progress');
-  const percent = document.getElementById('processing-percent');
-  const stage = document.getElementById('processing-stage');
-  const statusLabel = document.getElementById('item-status-label');
-  let finished = false;
-
-  async function poll() {
-    if (finished) return;
-    try {
-      const response = await fetch(url, {
-        headers: {'X-Requested-With': 'XMLHttpRequest'},
-        cache: 'no-store'
-      });
-      if (!response.ok) throw new Error('Falha ao consultar andamento');
-      const data = await response.json();
-
-      bar.value = data.progress;
-      percent.textContent = data.progress + '%';
-      stage.textContent = data.stage || 'Processando...';
-      if (statusLabel) statusLabel.textContent = data.status_label;
-
-      if (data.done) {
-        finished = true;
-        setTimeout(() => window.location.reload(), 600);
-        return;
-      }
-    } catch (error) {
-      stage.textContent = 'Processando...';
-    }
-    setTimeout(poll, 2000);
-  }
-
-  setTimeout(poll, 1000);
-})();
-</script>
-{% endif %}
-{% endblock %}
+{% block title %}{{ item.title|default:'Item' }} · Segundo Cérebro{% endblock %}
 {% block content %}
 <article>
   <div class="detail-head">
@@ -281,4 +237,48 @@
     </section>
   {% endif %}
 </article>
+
+{% if item.status == 'processing' %}
+<script>
+(() => {
+  const box = document.getElementById('processing-status');
+  if (!box) return;
+
+  const url = box.dataset.progressUrl;
+  const bar = document.getElementById('processing-progress');
+  const percent = document.getElementById('processing-percent');
+  const stage = document.getElementById('processing-stage');
+  const statusLabel = document.getElementById('item-status-label');
+  let finished = false;
+
+  async function poll() {
+    if (finished) return;
+    try {
+      const response = await fetch(url, {
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+        cache: 'no-store'
+      });
+      if (!response.ok) throw new Error('Falha ao consultar andamento');
+      const data = await response.json();
+
+      bar.value = data.progress;
+      percent.textContent = data.progress + '%';
+      stage.textContent = data.stage || 'Processando...';
+      if (statusLabel) statusLabel.textContent = data.status_label;
+
+      if (data.done) {
+        finished = true;
+        setTimeout(() => window.location.reload(), 600);
+        return;
+      }
+    } catch (error) {
+      stage.textContent = 'Processando...';
+    }
+    setTimeout(poll, 2000);
+  }
+
+  setTimeout(poll, 1000);
+})();
+</script>
+{% endif %}
 {% endblock %}
