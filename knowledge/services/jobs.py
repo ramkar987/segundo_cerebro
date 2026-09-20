@@ -5,6 +5,7 @@ from django.utils import timezone
 from ..models import Item, ProcessingJob
 from .analysis import AnalysisSkipped, analyze_item
 from .extractors import extract_video_metadata, extract_webpage
+from .relations import RelationDiscoverySkipped, discover_relations
 from .transcription import (
     TranscriptionSkipped,
     mark_transcription_state,
@@ -59,7 +60,6 @@ def _try_transcription(item: Item) -> None:
     except TranscriptionSkipped as exc:
         mark_transcription_state(item, 'skipped', str(exc))
     except Exception as exc:
-        # Metadados/legenda continuam válidos mesmo que a transcrição falhe.
         mark_transcription_state(item, 'error', str(exc))
 
 
@@ -67,7 +67,9 @@ def queue_analysis(item: Item) -> None:
     if not settings.ANALYZE_CONTENT or not settings.GROQ_API_KEY:
         return
     if item.analysis:
+        queue_relations(item)
         return
+
     exists = item.jobs.filter(
         kind=ProcessingJob.Kind.ANALYZE,
         state__in=[
@@ -80,6 +82,24 @@ def queue_analysis(item: Item) -> None:
         ProcessingJob.objects.create(
             item=item,
             kind=ProcessingJob.Kind.ANALYZE,
+        )
+
+
+def queue_relations(item: Item) -> None:
+    if not item.analysis or not settings.GROQ_API_KEY:
+        return
+
+    exists = item.jobs.filter(
+        kind=ProcessingJob.Kind.RELATE,
+        state__in=[
+            ProcessingJob.State.PENDING,
+            ProcessingJob.State.RUNNING,
+        ],
+    ).exists()
+    if not exists:
+        ProcessingJob.objects.create(
+            item=item,
+            kind=ProcessingJob.Kind.RELATE,
         )
 
 
@@ -101,8 +121,19 @@ def _process_analysis_job(job: ProcessingJob) -> None:
     try:
         analyze_item(job.item)
         _finish_job(job)
+        queue_relations(job.item)
     except AnalysisSkipped as exc:
-        # Não é erro do item; apenas não havia configuração/conteúdo suficiente.
+        _finish_job(job, str(exc))
+    except Exception as exc:
+        _fail_job(job, exc)
+        raise
+
+
+def _process_relation_job(job: ProcessingJob) -> None:
+    try:
+        created = discover_relations(job.item)
+        _finish_job(job, f'{len(created)} relação(ões) sugerida(s).')
+    except RelationDiscoverySkipped as exc:
         _finish_job(job, str(exc))
     except Exception as exc:
         _fail_job(job, exc)
@@ -160,4 +191,6 @@ def _process_extract_job(job: ProcessingJob) -> None:
 def process_job(job: ProcessingJob):
     if job.kind == ProcessingJob.Kind.ANALYZE:
         return _process_analysis_job(job)
+    if job.kind == ProcessingJob.Kind.RELATE:
+        return _process_relation_job(job)
     return _process_extract_job(job)
