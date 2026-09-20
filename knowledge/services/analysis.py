@@ -40,11 +40,19 @@ Analise somente o material fornecido. Não use conhecimento externo para complet
 REGRAS DE PROVENIÊNCIA:
 - caption = texto semântico da legenda, já sem hashtags decorativas;
 - transcript = fala transcrita do vídeo;
-- content = conteúdo principal para notas/páginas sem vídeo.
+- visual_text = texto extraído dos slides/imagens de um post ou carrossel;
+- content = conteúdo principal para notas/páginas que não sejam vídeo nem carrossel.
+
 Quando caption e transcript existirem, compare-os de forma estrita:
 - video_explains: somente informações que aparecem na transcrição e NÃO aparecem semanticamente na legenda;
 - caption_adds: somente informações que aparecem semanticamente na legenda e NÃO aparecem na transcrição;
 - common_points: somente ideias realmente expressas nas DUAS fontes.
+
+Quando caption e visual_text existirem e transcript estiver vazio, use as MESMAS chaves, mas:
+- video_explains: somente informações presentes nos slides/imagens e NÃO na legenda;
+- caption_adds: somente informações presentes na legenda e NÃO nos slides/imagens;
+- common_points: somente ideias realmente expressas nas DUAS fontes.
+
 Não transforme uma ideia presente só em uma das fontes em "ponto em comum" por inferência.
 Se uma categoria não tiver conteúdo real, retorne [].
 Não trate hashtags, emojis ou palavras-chave soltas como conteúdo adicional da legenda.
@@ -87,7 +95,7 @@ topic: string;
 subtopic: string;
 tags: array de 3 a 10 strings.
 
-Para conteúdos sem vídeo, use video_explains, caption_adds e common_points como arrays vazios.
+Para conteúdos sem vídeo e sem visual_text, use video_explains, caption_adds e common_points como arrays vazios.
 """
 
 
@@ -161,12 +169,23 @@ def _validated_points(value, source_text: str, limit: int) -> list[str]:
 
 def _analysis_payload(item: Item) -> dict:
     source = item.source
+    metadata = source.metadata or {}
+    media_kind = metadata.get('media_kind') or ''
+    visual_text = (
+        item.content
+        if item.type == Item.Type.INSTAGRAM
+        and media_kind in {'image', 'carousel'}
+        else ''
+    )
+    content = '' if visual_text else item.content
+
     return {
         'type': item.type,
         'title': item.title,
-        'content': item.content,
+        'content': content,
         'caption': _semantic_caption(source.caption),
         'transcript': source.transcript,
+        'visual_text': visual_text,
         'source_author': item.source_author,
         'source_url': item.source_url,
     }
@@ -187,7 +206,10 @@ def _call_groq(item: Item) -> dict:
         raise AnalysisSkipped('ANALYZE_CONTENT está desativado.')
 
     payload = _analysis_payload(item)
-    if not any(_text(payload[key]) for key in ('content', 'caption', 'transcript')):
+    if not any(
+        _text(payload[key])
+        for key in ('content', 'caption', 'transcript', 'visual_text')
+    ):
         raise AnalysisSkipped('Item sem conteúdo suficiente para análise.')
 
     response = requests.post(
@@ -227,6 +249,7 @@ def _call_groq(item: Item) -> dict:
             payload.get('content', ''),
             payload.get('caption', ''),
             payload.get('transcript', ''),
+            payload.get('visual_text', ''),
         )
         if part
     )
