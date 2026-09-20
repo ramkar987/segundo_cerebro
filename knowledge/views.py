@@ -121,6 +121,13 @@ def home(request):
             for item_id in batch_ids
             if item_id in found
         ]
+    else:
+        # Compatibilidade para itens colocados na fila antes do painel de lote:
+        # se ainda estiverem processando, eles aparecem automaticamente.
+        batch_items = list(
+            Item.objects.filter(status=Item.Status.PROCESSING)
+            .order_by('-created_at')[:100]
+        )
 
     return render(
         request,
