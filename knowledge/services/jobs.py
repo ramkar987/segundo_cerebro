@@ -13,12 +13,24 @@ from .transcription import (
 )
 
 
+def _set_progress(item: Item, progress: int, stage: str, status=None) -> None:
+    item.processing_progress = max(0, min(int(progress), 100))
+    item.processing_stage = stage[:160]
+    fields = ['processing_progress', 'processing_stage', 'updated_at']
+    if status is not None:
+        item.status = status
+        fields.append('status')
+    item.save(update_fields=fields)
+
+
 def claim_next_job():
     with transaction.atomic():
-        job = (ProcessingJob.objects.select_for_update(skip_locked=True)
-               .filter(state=ProcessingJob.State.PENDING)
-               .order_by('created_at')
-               .first())
+        job = (
+            ProcessingJob.objects.select_for_update(skip_locked=True)
+            .filter(state=ProcessingJob.State.PENDING)
+            .order_by('created_at')
+            .first()
+        )
         if not job:
             return None
         job.state = ProcessingJob.State.RUNNING
@@ -53,54 +65,69 @@ def _useful_instagram_title(raw_title: str, caption: str) -> str:
 
 def _try_transcription(item: Item) -> None:
     if not settings.TRANSCRIBE_MEDIA:
+        _set_progress(item, 65, 'Transcrição desativada; seguindo')
         return
 
     try:
-        transcribe_item(item)
+        transcribe_item(
+            item,
+            progress=lambda value, label: _set_progress(item, value, label),
+        )
     except TranscriptionSkipped as exc:
         mark_transcription_state(item, 'skipped', str(exc))
+        _set_progress(item, 65, 'Transcrição pulada; seguindo')
     except Exception as exc:
+        # Metadados/legenda continuam válidos mesmo que a transcrição falhe.
         mark_transcription_state(item, 'error', str(exc))
+        _set_progress(item, 65, 'Transcrição falhou; seguindo com a legenda')
 
 
-def queue_analysis(item: Item) -> None:
+def queue_analysis(item: Item) -> bool:
     if not settings.ANALYZE_CONTENT or not settings.GROQ_API_KEY:
-        return
+        return False
+
     if item.analysis:
-        queue_relations(item)
-        return
+        return queue_relations(item)
 
-    exists = item.jobs.filter(
-        kind=ProcessingJob.Kind.ANALYZE,
-        state__in=[
-            ProcessingJob.State.PENDING,
-            ProcessingJob.State.RUNNING,
-            ProcessingJob.State.DONE,
-        ],
-    ).exists()
-    if not exists:
-        ProcessingJob.objects.create(
-            item=item,
+    existing = (
+        item.jobs.filter(
             kind=ProcessingJob.Kind.ANALYZE,
+            state__in=[
+                ProcessingJob.State.PENDING,
+                ProcessingJob.State.RUNNING,
+            ],
         )
+        .exists()
+    )
+    if existing:
+        return True
+
+    ProcessingJob.objects.create(
+        item=item,
+        kind=ProcessingJob.Kind.ANALYZE,
+    )
+    return True
 
 
-def queue_relations(item: Item) -> None:
+def queue_relations(item: Item) -> bool:
     if not item.analysis or not settings.GROQ_API_KEY:
-        return
+        return False
 
-    exists = item.jobs.filter(
+    existing = item.jobs.filter(
         kind=ProcessingJob.Kind.RELATE,
         state__in=[
             ProcessingJob.State.PENDING,
             ProcessingJob.State.RUNNING,
         ],
     ).exists()
-    if not exists:
-        ProcessingJob.objects.create(
-            item=item,
-            kind=ProcessingJob.Kind.RELATE,
-        )
+    if existing:
+        return True
+
+    ProcessingJob.objects.create(
+        item=item,
+        kind=ProcessingJob.Kind.RELATE,
+    )
+    return True
 
 
 def _finish_job(job: ProcessingJob, error: str = '') -> None:
@@ -118,33 +145,58 @@ def _fail_job(job: ProcessingJob, exc: Exception) -> None:
 
 
 def _process_analysis_job(job: ProcessingJob) -> None:
+    item = job.item
+    _set_progress(item, 75, 'Analisando conteúdo com IA', Item.Status.PROCESSING)
+
     try:
-        analyze_item(job.item)
+        analyze_item(item)
+        _set_progress(item, 88, 'Análise da IA concluída')
         _finish_job(job)
-        queue_relations(job.item)
+
+        if queue_relations(item):
+            _set_progress(item, 92, 'Procurando conteúdos relacionados')
+        else:
+            _set_progress(item, 100, 'Concluído', Item.Status.PROCESSED)
+
     except AnalysisSkipped as exc:
         _finish_job(job, str(exc))
+        _set_progress(item, 100, 'Concluído sem análise da IA', Item.Status.PROCESSED)
     except Exception as exc:
         _fail_job(job, exc)
+        _set_progress(item, 100, 'Erro na análise da IA', Item.Status.ERROR)
         raise
 
 
 def _process_relation_job(job: ProcessingJob) -> None:
+    item = job.item
+    _set_progress(item, 94, 'Comparando com a biblioteca', Item.Status.PROCESSING)
+
     try:
-        created = discover_relations(job.item)
+        created = discover_relations(item)
         _finish_job(job, f'{len(created)} relação(ões) sugerida(s).')
+        _set_progress(item, 100, 'Concluído', Item.Status.PROCESSED)
     except RelationDiscoverySkipped as exc:
         _finish_job(job, str(exc))
+        _set_progress(item, 100, 'Concluído', Item.Status.PROCESSED)
     except Exception as exc:
+        # Relações são enriquecimento; não invalidam o conteúdo já processado.
         _fail_job(job, exc)
-        raise
+        _set_progress(
+            item,
+            100,
+            'Concluído; relações não puderam ser analisadas',
+            Item.Status.PROCESSED,
+        )
 
 
 def _process_extract_job(job: ProcessingJob) -> None:
     item = job.item
+    _set_progress(item, 10, 'Lendo a fonte', Item.Status.PROCESSING)
+
     try:
         if item.type in {Item.Type.INSTAGRAM, Item.Type.YOUTUBE}:
             data = extract_video_metadata(item.source_url)
+            _set_progress(item, 25, 'Metadados e legenda obtidos')
 
             if item.type == Item.Type.INSTAGRAM:
                 item.title = _useful_instagram_title(data['title'], data['caption'])
@@ -163,28 +215,32 @@ def _process_extract_job(job: ProcessingJob) -> None:
             source.metadata = data['metadata']
             source.save()
 
+            item.save()
             _try_transcription(item)
 
         elif item.type == Item.Type.WEB:
+            _set_progress(item, 35, 'Extraindo conteúdo da página')
             data = extract_webpage(
                 item.source_url,
                 timeout=settings.WEB_FETCH_TIMEOUT,
             )
             item.title = data['title'] or item.title
             item.content = data['content']
+            item.save()
+            _set_progress(item, 65, 'Conteúdo da página obtido')
         else:
             raise ValueError(f'Tipo não processável: {item.type}')
 
-        item.status = Item.Status.PROCESSED
-        item.save()
-
         _finish_job(job)
-        queue_analysis(item)
+
+        if queue_analysis(item):
+            _set_progress(item, 70, 'Aguardando análise da IA', Item.Status.PROCESSING)
+        else:
+            _set_progress(item, 100, 'Concluído', Item.Status.PROCESSED)
 
     except Exception as exc:
-        item.status = Item.Status.ERROR
-        item.save(update_fields=['status', 'updated_at'])
         _fail_job(job, exc)
+        _set_progress(item, 100, 'Erro ao processar a fonte', Item.Status.ERROR)
         raise
 
 
