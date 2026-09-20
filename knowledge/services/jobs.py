@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -142,10 +144,17 @@ def _finish_job(job: ProcessingJob, error: str = '') -> None:
     job.save(update_fields=['state', 'finished_at', 'error'])
 
 
+ANSI_ESCAPE_RE = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
+
+
+def _clean_error(value) -> str:
+    return ANSI_ESCAPE_RE.sub('', str(value or '')).strip()
+
+
 def _fail_job(job: ProcessingJob, exc: Exception) -> None:
     job.state = ProcessingJob.State.ERROR
     job.finished_at = timezone.now()
-    job.error = str(exc)[:5000]
+    job.error = _clean_error(exc)[:5000]
     job.save(update_fields=['state', 'finished_at', 'error'])
 
 
@@ -259,7 +268,7 @@ def _process_extract_job(job: ProcessingJob) -> None:
             ):
                 if settings.ANALYZE_IMAGES and data.get('image_urls'):
                     try:
-                        visual_text, slides = extract_visual_text(
+                        visual_text, slides, visual_errors = extract_visual_text(
                             data['image_urls'],
                             progress=lambda value, label: _set_progress(
                                 item, value, label
@@ -267,23 +276,46 @@ def _process_extract_job(job: ProcessingJob) -> None:
                         )
                         item.content = visual_text
                         metadata = dict(source.metadata or {})
+                        slides_with_text = sum(
+                            1 for slide in slides if slide.get('text')
+                        )
+                        if visual_errors and slides_with_text:
+                            visual_status = 'partial'
+                        elif visual_errors:
+                            visual_status = 'error'
+                        else:
+                            visual_status = 'done'
+
                         metadata['visual_extraction'] = {
-                            'status': 'done',
+                            'status': visual_status,
                             'model': settings.GROQ_VISION_MODEL,
                             'slide_count': len(slides),
-                            'slides_with_text': sum(
-                                1 for slide in slides if slide.get('text')
-                            ),
+                            'slides_with_text': slides_with_text,
+                            'errors': visual_errors[:10],
                         }
                         source.metadata = metadata
-                        _set_progress(item, 65, 'Texto dos slides extraído')
+
+                        if visual_status == 'partial':
+                            _set_progress(
+                                item,
+                                65,
+                                'Parte dos slides foi lida; seguindo com o conteúdo obtido',
+                            )
+                        elif visual_status == 'error':
+                            _set_progress(
+                                item,
+                                65,
+                                'Não foi possível ler os slides; seguindo com a legenda',
+                            )
+                        else:
+                            _set_progress(item, 65, 'Texto dos slides extraído')
                     except Exception as exc:
                         # A legenda continua útil; falha visual não invalida a captura.
                         metadata = dict(source.metadata or {})
                         metadata['visual_extraction'] = {
                             'status': 'error',
                             'model': settings.GROQ_VISION_MODEL,
-                            'message': str(exc)[:1000],
+                            'message': _clean_error(exc)[:1000],
                         }
                         source.metadata = metadata
                         _set_progress(
