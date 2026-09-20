@@ -4,6 +4,7 @@ import base64
 import json
 import mimetypes
 import re
+import time
 from dataclasses import dataclass
 
 import instaloader
@@ -178,26 +179,46 @@ def _vision_batch(batch: list[tuple[int, str]]) -> list[dict]:
             }
         )
 
-    response = requests.post(
-        'https://api.groq.com/openai/v1/chat/completions',
-        headers={
-            'Authorization': f'Bearer {settings.GROQ_API_KEY}',
-            'Content-Type': 'application/json',
-        },
-        json={
-            'model': settings.GROQ_VISION_MODEL,
-            'messages': [{'role': 'user', 'content': parts}],
-            'response_format': {'type': 'json_object'},
-            'temperature': 0,
-            'max_completion_tokens': 3000,
-        },
-        timeout=settings.AI_TIMEOUT,
-    )
+    response = None
+    for attempt in range(4):
+        response = requests.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            headers={
+                'Authorization': f'Bearer {settings.GROQ_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': settings.GROQ_VISION_MODEL,
+                'messages': [{'role': 'user', 'content': parts}],
+                'response_format': {'type': 'json_object'},
+                'temperature': 0,
+                # O tier gratuito/on-demand pode limitar a saída por minuto.
+                # 800 é suficiente para OCR de até 3 slides sem pedir uma
+                # reserva maior que o limite observado de 1000 tokens/min.
+                'max_completion_tokens': 800,
+            },
+            timeout=settings.AI_TIMEOUT,
+        )
 
-    if response.status_code >= 400:
+        if response.status_code != 429:
+            break
+
+        if attempt >= 3:
+            break
+
+        retry_after = response.headers.get('Retry-After')
+        try:
+            wait_seconds = float(retry_after) if retry_after else 20.0
+        except (TypeError, ValueError):
+            wait_seconds = 20.0
+
+        time.sleep(max(2.0, min(wait_seconds, 65.0)))
+
+    if response is None or response.status_code >= 400:
+        status = response.status_code if response is not None else 'sem resposta'
+        detail = response.text[:1200] if response is not None else ''
         raise InstagramImageExtractionError(
-            f'Groq Vision retornou HTTP {response.status_code}: '
-            f'{response.text[:1200]}'
+            f'Groq Vision retornou HTTP {status}: {detail}'
         )
 
     raw = response.json()['choices'][0]['message']['content']
