@@ -286,9 +286,18 @@ def _process_extract_job(job: ProcessingJob) -> None:
                         else:
                             visual_status = 'done'
 
+                        providers = sorted(
+                            {
+                                slide.get('provider')
+                                for slide in slides
+                                if slide.get('provider')
+                            }
+                        )
                         metadata['visual_extraction'] = {
                             'status': visual_status,
-                            'model': settings.GROQ_VISION_MODEL,
+                            'providers': providers,
+                            'groq_model': settings.GROQ_VISION_MODEL,
+                            'gemini_model': settings.GEMINI_VISION_MODEL,
                             'slide_count': len(slides),
                             'slides_with_text': slides_with_text,
                             'errors': visual_errors[:10],
