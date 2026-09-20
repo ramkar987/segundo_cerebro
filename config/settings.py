@@ -107,3 +107,18 @@ MAX_VISION_IMAGE_BYTES = int(os.getenv('MAX_VISION_IMAGE_BYTES', str(15 * 1024 *
 GROQ_CHAT_MODEL = os.getenv('GROQ_CHAT_MODEL', 'openai/gpt-oss-20b').strip()
 ANALYZE_CONTENT = os.getenv('ANALYZE_CONTENT', '1') == '1'
 AI_TIMEOUT = int(os.getenv('AI_TIMEOUT', '120'))
+
+
+# Busca semântica / RAG.
+SEMANTIC_SEARCH_ENABLED = os.getenv('SEMANTIC_SEARCH_ENABLED', '1') == '1'
+GEMINI_EMBEDDING_MODEL = os.getenv(
+    'GEMINI_EMBEDDING_MODEL',
+    'gemini-embedding-2',
+).strip()
+EMBEDDING_DIMENSIONS = int(os.getenv('EMBEDDING_DIMENSIONS', '768'))
+EMBEDDING_BATCH_SIZE = int(os.getenv('EMBEDDING_BATCH_SIZE', '20'))
+SEMANTIC_CHUNK_CHARS = int(os.getenv('SEMANTIC_CHUNK_CHARS', '1400'))
+SEMANTIC_TOP_K = int(os.getenv('SEMANTIC_TOP_K', '24'))
+SEMANTIC_MIN_SCORE = float(os.getenv('SEMANTIC_MIN_SCORE', '0.20'))
+RAG_TOP_K = int(os.getenv('RAG_TOP_K', '8'))
+RAG_MAX_CHUNKS_PER_ITEM = int(os.getenv('RAG_MAX_CHUNKS_PER_ITEM', '3'))
