@@ -1,33 +1,116 @@
 {% extends 'base.html' %}
+{% load timecode %}
 {% block title %}Biblioteca · Segundo Cérebro{% endblock %}
 {% block content %}
-<div class="section-head"><div><p class="eyebrow">BIBLIOTECA</p><h1>Encontre sem lembrar onde guardou</h1></div></div>
-<form method="get" class="filters">
-  <input name="q" value="{{ q }}" placeholder="Pesquisar título, conteúdo, autor, tag, assunto ou projeto…">
-  <select name="type"><option value="">Todos os tipos</option>{% for value,label in type_choices %}<option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-  <select name="status"><option value="">Todos os status</option>{% for value,label in status_choices %}<option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-  <label class="check"><input type="checkbox" name="favorite" value="1" {% if favorite == '1' %}checked{% endif %}> Favoritos</label>
-  <button type="submit">Filtrar</button>
+<div class="section-head">
+  <div>
+    <p class="eyebrow">BIBLIOTECA</p>
+    <h1>Encontre sem lembrar onde guardou</h1>
+  </div>
+</div>
+
+<form method="get" class="filters semantic-filters">
+  <input
+    name="q"
+    value="{{ q }}"
+    placeholder="Pesquise por palavras ou descreva o que você procura…"
+  >
+  <select name="type">
+    <option value="">Todos os tipos</option>
+    {% for value,label in type_choices %}
+      <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="status">
+    <option value="">Todos os status</option>
+    {% for value,label in status_choices %}
+      <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label class="check">
+    <input type="checkbox" name="favorite" value="1" {% if favorite == '1' %}checked{% endif %}>
+    Favoritos
+  </label>
+
+  <div class="search-mode-actions">
+    <button
+      type="submit"
+      name="search_mode"
+      value="text"
+      {% if search_mode == 'text' %}class="primary"{% endif %}
+    >Texto</button>
+    <button
+      type="submit"
+      name="search_mode"
+      value="semantic"
+      {% if search_mode == 'semantic' %}class="primary"{% endif %}
+    >✨ Semântica</button>
+  </div>
+
   <a class="button-link" href="{% url 'library' %}">Limpar</a>
 </form>
+
+{% if search_mode == 'semantic' and q %}
+  <div class="semantic-search-note">
+    <strong>Busca semântica:</strong>
+    procurando pelo significado de “{{ q }}”, não apenas pelas palavras exatas.
+  </div>
+{% endif %}
+
+{% if semantic_error %}
+  <div class="message warning">
+    {{ semantic_error }}
+  </div>
+{% endif %}
+
 <div class="list">
-{% for item in items %}
-  <a class="list-item" href="{{ item.get_absolute_url }}">
-    <div class="list-main">
-      <div class="card-meta">
-        <span class="badge">{{ item.get_type_display }}</span>
-        {% if item.status == 'processing' %}
-          <span>Processando · {{ item.processing_progress }}% · {{ item.processing_stage }}</span>
-        {% else %}
-          <span>{{ item.get_status_display }}</span>
-        {% endif %}
-        {% if item.favorite %}<span>⭐</span>{% endif %}
+{% if search_mode == 'semantic' and q %}
+  {% for result in semantic_results %}
+    <a class="list-item semantic-result" href="{{ result.item.get_absolute_url }}">
+      <div class="list-main">
+        <div class="card-meta">
+          <span class="badge">{{ result.item.get_type_display }}</span>
+          <span>{{ result.chunk.get_kind_display }}</span>
+          {% if result.chunk.kind == 'transcript' and result.chunk.start_seconds is not None %}
+            <span>⏱ {{ result.chunk.start_seconds|timecode }}</span>
+          {% elif result.chunk.page and result.item.type == 'instagram' %}
+            <span>🖼 slide {{ result.chunk.page }}</span>
+          {% endif %}
+          {% if result.item.favorite %}<span>⭐</span>{% endif %}
+        </div>
+        <h3>{{ result.item.title|default:'Sem título' }}</h3>
+        <p class="semantic-excerpt">{{ result.excerpt|truncatechars:320 }}</p>
       </div>
-      <h3>{{ item.title|default:'Sem título' }}</h3>
-      <p>{{ item.summary|default:item.content|truncatechars:220 }}</p>
-    </div>
-    <div class="arrow">→</div>
-  </a>
-{% empty %}<div class="empty">Nenhum item encontrado com esses filtros.</div>{% endfor %}
+      <div class="arrow">→</div>
+    </a>
+  {% empty %}
+    {% if not semantic_error %}
+      <div class="empty">
+        Nenhum trecho semanticamente próximo foi encontrado. Se o acervo antigo ainda não foi indexado, rode a indexação inicial.
+      </div>
+    {% endif %}
+  {% endfor %}
+{% else %}
+  {% for item in items %}
+    <a class="list-item" href="{{ item.get_absolute_url }}">
+      <div class="list-main">
+        <div class="card-meta">
+          <span class="badge">{{ item.get_type_display }}</span>
+          {% if item.status == 'processing' %}
+            <span>Processando · {{ item.processing_progress }}% · {{ item.processing_stage }}</span>
+          {% else %}
+            <span>{{ item.get_status_display }}</span>
+          {% endif %}
+          {% if item.favorite %}<span>⭐</span>{% endif %}
+        </div>
+        <h3>{{ item.title|default:'Sem título' }}</h3>
+        <p>{{ item.summary|default:item.content|truncatechars:220 }}</p>
+      </div>
+      <div class="arrow">→</div>
+    </a>
+  {% empty %}
+    <div class="empty">Nenhum item encontrado com esses filtros.</div>
+  {% endfor %}
+{% endif %}
 </div>
 {% endblock %}
