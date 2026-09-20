@@ -24,6 +24,7 @@ def home(request):
         duplicate_count = 0
         invalid_count = 0
         error_count = 0
+        created_ids = []
 
         for raw in batch_form.cleaned_data['batch_capture']:
             detection = detect_capture(raw)
@@ -32,14 +33,16 @@ def home(request):
                 continue
 
             try:
-                create_capture(raw)
+                item = create_capture(raw)
                 created_count += 1
+                created_ids.append(item.pk)
             except DuplicateCapture:
                 duplicate_count += 1
             except Exception:
                 error_count += 1
 
         if created_count:
+            request.session['last_batch_ids'] = created_ids
             messages.success(
                 request,
                 f'{created_count} novo(s) link(s) colocado(s) na fila de processamento.',
@@ -105,6 +108,20 @@ def home(request):
         return redirect(item)
 
     recent = Item.objects.all()[:8]
+
+    batch_ids = request.session.get('last_batch_ids', [])
+    batch_items = []
+    if batch_ids:
+        found = {
+            item.pk: item
+            for item in Item.objects.filter(pk__in=batch_ids)
+        }
+        batch_items = [
+            found[item_id]
+            for item_id in batch_ids
+            if item_id in found
+        ]
+
     return render(
         request,
         'knowledge/home.html',
@@ -112,6 +129,7 @@ def home(request):
             'form': form,
             'batch_form': batch_form,
             'batch_open': mode == 'batch',
+            'batch_items': batch_items,
             'recent': recent,
         },
     )
@@ -217,6 +235,8 @@ def item_progress(request, pk):
     )
     return JsonResponse({
         'id': item.id,
+        'title': item.title or 'Sem título',
+        'type_label': item.get_type_display(),
         'status': item.status,
         'status_label': item.get_status_display(),
         'progress': item.processing_progress,
