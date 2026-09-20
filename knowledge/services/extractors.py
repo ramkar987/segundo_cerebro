@@ -12,9 +12,20 @@ def _hashtags(text: str) -> list[str]:
     return sorted({tag.lower() for tag in re.findall(r'(?<!\w)#([\wÀ-ÿ_]+)', text or '')})
 
 
+def _useful_handle(raw: str) -> str:
+    handle = (raw or '').strip().lstrip('@')
+    if not handle:
+        return ''
+    # Instagram às vezes entrega apenas um ID numérico; YouTube pode entregar
+    # um channel id UC... Ambos são úteis como metadado, mas ruins para exibir.
+    if handle.isdigit() or handle.startswith('UC'):
+        return ''
+    return handle
+
+
 def _author_label(info: dict) -> str:
     name = (info.get('uploader') or info.get('channel') or '').strip()
-    handle = (info.get('uploader_id') or '').strip().lstrip('@')
+    handle = _useful_handle(info.get('uploader_id') or '')
 
     if name and handle and handle.lower() not in name.lower():
         return f'{name} (@{handle})'
