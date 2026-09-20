@@ -2,7 +2,11 @@ from pathlib import Path
 import os
 from urllib.parse import urlparse, unquote
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
+
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-only-change-me')
 DEBUG = os.getenv('DJANGO_DEBUG', '1') == '1'
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
@@ -60,6 +64,7 @@ def database_from_env():
         'CONN_MAX_AGE': 60,
     }
 
+
 DATABASES = {'default': database_from_env()}
 
 AUTH_PASSWORD_VALIDATORS = []
@@ -78,3 +83,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Limites iniciais, ajustáveis via ambiente.
 MAX_CAPTURE_CHARS = int(os.getenv('MAX_CAPTURE_CHARS', '200000'))
 WEB_FETCH_TIMEOUT = int(os.getenv('WEB_FETCH_TIMEOUT', '20'))
+
+# Transcrição. Sem GROQ_API_KEY a captura continua funcionando; apenas pula áudio.
+GROQ_API_KEY = os.getenv('GROQ_API_KEY', '').strip()
+GROQ_WHISPER_MODEL = os.getenv('GROQ_WHISPER_MODEL', 'whisper-large-v3-turbo').strip()
+TRANSCRIBE_MEDIA = os.getenv('TRANSCRIBE_MEDIA', '1') == '1'
+TRANSCRIPTION_LANGUAGE = os.getenv('TRANSCRIPTION_LANGUAGE', 'pt').strip() or 'pt'
+MAX_TRANSCRIPTION_BYTES = int(os.getenv('MAX_TRANSCRIPTION_BYTES', str(24 * 1024 * 1024)))
