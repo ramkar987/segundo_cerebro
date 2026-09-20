@@ -232,6 +232,7 @@ def _vision_batch_groq(batch: list[tuple[int, str]]) -> list[dict]:
 
 
 
+
 def _vision_batch_gemini(batch: list[tuple[int, str]]) -> list[dict]:
     if not settings.GEMINI_API_KEY:
         raise InstagramImageExtractionError('GEMINI_API_KEY não configurada.')
@@ -278,7 +279,6 @@ def _vision_batch_gemini(batch: list[tuple[int, str]]) -> list[dict]:
                     }
                 ],
                 'generationConfig': {
-                    'temperature': 0,
                     'maxOutputTokens': 350,
                     'responseMimeType': 'application/json',
                 },
