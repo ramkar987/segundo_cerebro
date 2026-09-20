@@ -1,5 +1,41 @@
 {% extends 'base.html' %}
-{% block title %}Capturar · Segundo Cérebro{% endblock %}
+{% block title %}Capturar · Segundo Cérebro<script>
+  (() => {
+    const input = document.getElementById('id_capture');
+    const hint = document.getElementById('capture-hint');
+    if (!input || !hint) return;
+
+    const urlStart = /^(?:https?:\/\/|www\.)\S+/i;
+    const bareUrl = /^(?:https?:\/\/)?(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:[/?#]\S*)?$/i;
+
+    const updateHint = () => {
+      const value = input.value.trim();
+
+      if (!urlStart.test(value)) {
+        hint.hidden = true;
+        hint.className = 'capture-hint';
+        hint.textContent = '';
+        return;
+      }
+
+      hint.hidden = false;
+
+      if (bareUrl.test(value)) {
+        hint.className = 'capture-hint link-detected';
+        hint.textContent =
+          '🔗 Link detectado. O sistema vai identificar se é página web, Instagram ou YouTube.';
+      } else {
+        hint.className = 'capture-hint link-warning';
+        hint.textContent =
+          '⚠️ Esta captura será tratada como Nota porque há texto junto do link. Para capturar a página, deixe somente o link.';
+      }
+    };
+
+    input.addEventListener('input', updateHint);
+    updateHint();
+  })();
+</script>
+{% endblock %}
 {% block content %}
 <section class="hero">
   <p class="eyebrow">CAPTURA UNIVERSAL</p>
@@ -8,6 +44,7 @@
   <form method="post" class="capture-card">
     {% csrf_token %}
     {{ form.capture }}
+    <div id="capture-hint" class="capture-hint" hidden></div>
     <div class="capture-footer">
       {{ form.title }}
       <button class="primary" type="submit">Guardar</button>
