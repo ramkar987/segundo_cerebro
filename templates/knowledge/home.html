@@ -139,10 +139,18 @@
       {% endfor %}
     </div>
   </div>
-  <form method="post" action="{% url 'retry_last_batch_errors' %}">
-    {% csrf_token %}
-    <button type="submit" class="primary">↻ Tentar novamente todos</button>
-  </form>
+  {% if batch_retryable_count %}
+    <form method="post" action="{% url 'retry_last_batch_errors' %}">
+      {% csrf_token %}
+      <button type="submit" class="primary">
+        ↻ Tentar novamente {{ batch_retryable_count }} transitório(s)
+      </button>
+    </form>
+  {% elif batch_manual_count %}
+    <div class="batch-manual-note">
+      {{ batch_manual_count }} erro(s) exigem atenção manual
+    </div>
+  {% endif %}
 </section>
 {% endif %}
 
