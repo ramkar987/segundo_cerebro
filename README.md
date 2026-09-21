@@ -19,6 +19,8 @@ A ideia é reduzir o atrito entre **“vi algo interessante”** e **“isso ent
 - listas numeradas ou com marcadores também são aceitas;
 - links duplicados no lote são ignorados automaticamente;
 - acompanhamento ao vivo do lote enquanto ele estiver processando;
+- ao terminar, se houver falhas, aparece **Tentar novamente todos** para reenfileirar os erros do lote de uma vez;
+- o sistema recupera o lote mais recente pelo `batch_id`, mesmo quando a sessão do painel já tiver sido limpa;
 - registro no item indicando se a captura foi **individual** ou **em lote**.
 
 ### Instagram
