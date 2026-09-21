@@ -193,6 +193,46 @@ class BatchCaptureViewTests(TestCase):
         self.assertEqual(Item.objects.count(), 1)
 
 
+    def test_retry_resumes_failed_analysis_without_reextracting(self):
+        item = Item.objects.create(
+            type=Item.Type.INSTAGRAM,
+            title='Instagram já extraído',
+            source_url='https://www.instagram.com/reel/ABC/',
+            status=Item.Status.ERROR,
+            processing_progress=100,
+        )
+        ItemSource.objects.create(
+            item=item,
+            platform='instagram',
+            metadata={},
+        )
+        ProcessingJob.objects.create(
+            item=item,
+            kind=ProcessingJob.Kind.EXTRACT,
+            state=ProcessingJob.State.DONE,
+        )
+        ProcessingJob.objects.create(
+            item=item,
+            kind=ProcessingJob.Kind.ANALYZE,
+            state=ProcessingJob.State.ERROR,
+            error='Groq retornou HTTP 429',
+        )
+
+        response = self.client.post(
+            f'/item/{item.pk}/tentar-novamente/'
+        )
+
+        self.assertEqual(response.status_code, 302)
+        item.refresh_from_db()
+        self.assertEqual(item.status, Item.Status.PROCESSING)
+        self.assertEqual(item.processing_progress, 70)
+
+        pending = item.jobs.filter(
+            state=ProcessingJob.State.PENDING
+        ).latest('id')
+        self.assertEqual(pending.kind, ProcessingJob.Kind.ANALYZE)
+
+
     def test_retry_last_batch_errors_requeues_only_that_batch(self):
         batch_error = Item.objects.create(
             type=Item.Type.WEB,
