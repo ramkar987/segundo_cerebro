@@ -608,3 +608,63 @@ html[data-theme="dark"] .relation-more-menu .danger-action{
   text-decoration:underline;
   text-underline-offset:2px;
 }
+
+
+.batch-error-group-title{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 11px 8px;
+  font-size:13px;
+}
+.batch-error-items{
+  display:grid;
+  gap:6px;
+  padding:0 11px 10px;
+}
+.batch-error-items a{
+  display:block;
+  padding:7px 9px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--panel);
+  font-size:12px;
+  text-decoration:none;
+  overflow-wrap:anywhere;
+}
+.batch-error-items a:hover{
+  border-color:var(--hover-line);
+}
+.batch-error-technical{
+  border-top:1px solid var(--line);
+  padding:8px 11px 10px;
+}
+.batch-error-technical summary{
+  cursor:pointer;
+  color:var(--muted);
+  font-size:12px;
+}
+.batch-error-technical p{
+  margin:8px 0 0;
+  color:var(--muted);
+  font-size:11px;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.batch-manual-note{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  flex:0 0 210px;
+  color:var(--text);
+}
+.batch-manual-note span{
+  color:var(--muted);
+  font-size:12px;
+}
+@media(max-width:650px){
+  .batch-manual-note{
+    flex-basis:auto;
+  }
+}
