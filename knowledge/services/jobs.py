@@ -31,6 +31,35 @@ def _set_progress(item: Item, progress: int, stage: str, status=None) -> None:
     item.save(update_fields=fields)
 
 
+def finalize_legacy_relation_waiters() -> int:
+    """Finaliza itens antigos presos esperando somente descoberta de relações."""
+    candidates = (
+        Item.objects.filter(
+            status=Item.Status.PROCESSING,
+        )
+        .exclude(analysis={})
+        .order_by('id')
+    )
+
+    finalized = 0
+    for item in candidates:
+        active_jobs = item.jobs.filter(
+            state__in=[
+                ProcessingJob.State.PENDING,
+                ProcessingJob.State.RUNNING,
+            ]
+        )
+        if not active_jobs.exists():
+            continue
+        if active_jobs.exclude(kind=ProcessingJob.Kind.RELATE).exists():
+            continue
+
+        _complete_item(item)
+        finalized += 1
+
+    return finalized
+
+
 def claim_next_job():
     with transaction.atomic():
         pending = (
