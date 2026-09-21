@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from django.contrib import messages
@@ -104,8 +105,27 @@ def _batch_error_groups(items: list[Item]) -> list[dict]:
         else:
             group['manual_count'] += 1
         if len(group['items']) < 6:
+            display_title = (item.title or '').strip()
+            if not display_title or display_title.casefold() in {
+                'captura em processamento',
+                'instagram',
+                'sem título',
+            }:
+                if item.source_url:
+                    match = re.search(
+                        r'instagram\.com/(?:p|reel|tv)/([^/?#]+)',
+                        item.source_url,
+                        flags=re.IGNORECASE,
+                    )
+                    if match:
+                        display_title = f'Instagram · {match.group(1)}'
+                    else:
+                        display_title = item.source_url
+                else:
+                    display_title = f'Item #{item.pk}'
+
             group['items'].append({
-                'title': item.title or f'Item #{item.pk}',
+                'title': display_title,
                 'url': item.get_absolute_url(),
             })
 
