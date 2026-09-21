@@ -9,6 +9,7 @@ urlpatterns = [
     path('item/<int:pk>/progresso/', views.item_progress, name='item_progress'),
     path('item/<int:pk>/favorito/', views.toggle_favorite, name='toggle_favorite'),
     path('item/<int:pk>/tentar-novamente/', views.retry_item, name='retry_item'),
+    path('lote/tentar-erros-novamente/', views.retry_last_batch_errors, name='retry_last_batch_errors'),
     path('item/<int:pk>/reprocessar/', views.reprocess_item, name='reprocess_item'),
     path('relacao/<int:pk>/confirmar/', views.confirm_relation, name='confirm_relation'),
     path('relacao/<int:pk>/desconfirmar/', views.unconfirm_relation, name='unconfirm_relation'),
