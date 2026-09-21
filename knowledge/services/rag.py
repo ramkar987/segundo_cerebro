@@ -191,7 +191,7 @@ def _chat_json(
             # para Gemini.
             response = post_groq(
                 {
-                    'model': 'Groq/Gemini',
+                    'model': settings.GROQ_CHAT_MODEL,
                     'messages': [
                         {'role': 'system', 'content': system_prompt},
                         {'role': 'user', 'content': user_content},
@@ -337,7 +337,7 @@ def answer_from_library(question: str) -> dict:
                 'responde diretamente à pergunta com segurança.'
             ),
             'sources': [],
-            'model': settings.GROQ_CHAT_MODEL,
+            'model': 'Groq/Gemini',
         }
 
     # Renumera somente as fontes aprovadas.
