@@ -17,6 +17,61 @@ from .services.semantic import (
 )
 
 
+def _classify_processing_error(error: str) -> str:
+    text = (error or '').casefold()
+
+    if any(token in text for token in ('429', 'rate limit', 'too many requests')):
+        return 'Limite temporário da API (429)'
+    if any(token in text for token in ('timed out', 'timeout', 'tempo limite')):
+        return 'Tempo limite / conexão'
+    if any(token in text for token in ('403', 'forbidden', 'login required', 'private video', 'private post')):
+        return 'Conteúdo bloqueado, privado ou acesso negado'
+    if any(token in text for token in ('401', 'unauthorized', 'invalid api key')):
+        return 'Autenticação da API'
+    if 'instagram' in text or 'instaloader' in text:
+        return 'Falha ao ler conteúdo do Instagram'
+    if 'youtube' in text or 'yt-dlp' in text or 'yt_dlp' in text:
+        return 'Falha ao extrair vídeo'
+    if 'groq' in text:
+        return 'Falha na IA / Groq'
+    return 'Outros erros'
+
+
+def _batch_error_groups(items: list[Item]) -> list[dict]:
+    groups: dict[str, dict] = {}
+
+    for item in items:
+        error = (
+            item.jobs.filter(state=ProcessingJob.State.ERROR)
+            .order_by('-finished_at', '-id')
+            .values_list('error', flat=True)
+            .first()
+            or 'Erro sem detalhes registrados.'
+        )
+        label = _classify_processing_error(error)
+        group = groups.setdefault(
+            label,
+            {
+                'label': label,
+                'count': 0,
+                'sample': error[:700],
+                'items': [],
+            },
+        )
+        group['count'] += 1
+        if len(group['items']) < 6:
+            group['items'].append({
+                'title': item.title or f'Item #{item.pk}',
+                'url': item.get_absolute_url(),
+            })
+
+    return sorted(
+        groups.values(),
+        key=lambda group: group['count'],
+        reverse=True,
+    )
+
+
 def home(request):
     mode = request.POST.get('mode', 'single') if request.method == 'POST' else 'single'
     form = CaptureForm(
@@ -194,6 +249,7 @@ def home(request):
             'batch_items': batch_items,
             'batch_error_items': batch_error_items,
             'batch_error_count': len(batch_error_items),
+            'batch_error_groups': _batch_error_groups(batch_error_items),
             'recent': recent,
         },
     )
