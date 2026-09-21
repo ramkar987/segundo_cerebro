@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import re
 
-import requests
 from django.conf import settings
 
+from .groq_http import post_groq
 from .semantic import SemanticSearchUnavailable, semantic_search
 
 
@@ -82,25 +82,17 @@ def _source_locator(chunk) -> str:
 
 
 def _chat_json(system_prompt: str, user_content: str, max_tokens: int) -> dict:
-    response = requests.post(
-        'https://api.groq.com/openai/v1/chat/completions',
-        headers={
-            'Authorization': f'Bearer {settings.GROQ_API_KEY}',
-            'Content-Type': 'application/json',
-        },
-        json={
-            'model': settings.GROQ_CHAT_MODEL,
-            'messages': [
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': user_content},
-            ],
-            'response_format': {'type': 'json_object'},
-            'reasoning_effort': 'low',
-            'temperature': 0.0,
-            'max_completion_tokens': max_tokens,
-        },
-        timeout=settings.AI_TIMEOUT,
-    )
+    response = post_groq({
+        'model': settings.GROQ_CHAT_MODEL,
+        'messages': [
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user', 'content': user_content},
+        ],
+        'response_format': {'type': 'json_object'},
+        'reasoning_effort': 'low',
+        'temperature': 0.0,
+        'max_completion_tokens': max_tokens,
+    })
 
     if response.status_code >= 400:
         raise RagUnavailable(
