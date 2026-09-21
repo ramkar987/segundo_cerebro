@@ -225,7 +225,7 @@ def _call_groq(item: Item) -> dict:
         'reasoning_effort': 'low',
         'temperature': 0.1,
         'max_completion_tokens': 2000,
-    })
+    }, min_interval=settings.GROQ_WORKER_MIN_INTERVAL)
 
     if response.status_code >= 400:
         raise RuntimeError(
