@@ -6,7 +6,11 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from knowledge.models import ProcessingJob
-from knowledge.services.jobs import claim_next_job, process_job
+from knowledge.services.jobs import (
+    claim_next_job,
+    finalize_legacy_relation_waiters,
+    process_job,
+)
 
 
 
@@ -120,6 +124,15 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING(
                     f'{recovered} job(s) interrompido(s) devolvido(s) à fila.'
+                )
+            )
+
+        finalized = finalize_legacy_relation_waiters()
+        if finalized:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f'{finalized} item(ns) antigo(s) liberado(s) de 92–94% '
+                    'enquanto as conexões seguem em segundo plano.'
                 )
             )
 
