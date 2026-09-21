@@ -559,3 +559,52 @@ html[data-theme="dark"] .relation-more-menu .danger-action{
     width:100%;
   }
 }
+
+
+.batch-error-summary-main{
+  min-width:0;
+  flex:1 1 auto;
+}
+.batch-error-groups{
+  display:grid;
+  gap:7px;
+  margin-top:12px;
+}
+.batch-error-group{
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--control-bg);
+}
+.batch-error-group summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:9px 11px;
+  cursor:pointer;
+  font-size:13px;
+}
+.batch-error-group summary::-webkit-details-marker{
+  display:none;
+}
+.batch-error-group-body{
+  padding:0 11px 11px;
+  border-top:1px solid var(--line);
+}
+.batch-error-group-body p{
+  margin:9px 0;
+  color:var(--muted);
+  font-size:12px;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.batch-error-items{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px 10px;
+}
+.batch-error-items a{
+  font-size:12px;
+  text-decoration:underline;
+  text-underline-offset:2px;
+}
