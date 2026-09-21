@@ -108,6 +108,7 @@ MAX_VISION_IMAGE_BYTES = int(os.getenv('MAX_VISION_IMAGE_BYTES', str(15 * 1024 *
 GROQ_CHAT_MODEL = os.getenv('GROQ_CHAT_MODEL', 'openai/gpt-oss-20b').strip()
 ANALYZE_CONTENT = os.getenv('ANALYZE_CONTENT', '1') == '1'
 AI_TIMEOUT = int(os.getenv('AI_TIMEOUT', '120'))
+GROQ_WORKER_MIN_INTERVAL = float(os.getenv('GROQ_WORKER_MIN_INTERVAL', '20.0'))
 
 
 # Busca semântica / RAG.
