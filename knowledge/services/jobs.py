@@ -33,12 +33,26 @@ def _set_progress(item: Item, progress: int, stage: str, status=None) -> None:
 
 def claim_next_job():
     with transaction.atomic():
-        job = (
+        pending = (
             ProcessingJob.objects.select_for_update(skip_locked=True)
             .filter(state=ProcessingJob.State.PENDING)
+        )
+
+        # Extração/análise são trabalho principal; relações são enriquecimento.
+        # Assim novas capturas não ficam presas atrás de uma fila grande
+        # de descoberta de conexões.
+        job = (
+            pending.exclude(kind=ProcessingJob.Kind.RELATE)
             .order_by('created_at')
             .first()
         )
+        if not job:
+            job = (
+                pending.filter(kind=ProcessingJob.Kind.RELATE)
+                .order_by('created_at')
+                .first()
+            )
+
         if not job:
             return None
         job.state = ProcessingJob.State.RUNNING
