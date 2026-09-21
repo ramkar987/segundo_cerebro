@@ -120,22 +120,25 @@
 
     <div class="batch-error-groups">
       {% for group in batch_error_groups %}
-        <details class="batch-error-group">
-          <summary>
+        <div class="batch-error-group">
+          <div class="batch-error-group-title">
             <span>{{ group.label }}</span>
             <strong>{{ group.count }}×</strong>
-          </summary>
-          <div class="batch-error-group-body">
-            <p>{{ group.sample }}</p>
-            {% if group.items %}
-              <div class="batch-error-items">
-                {% for failed in group.items %}
-                  <a href="{{ failed.url }}">{{ failed.title }}</a>
-                {% endfor %}
-              </div>
-            {% endif %}
           </div>
-        </details>
+
+          {% if group.items %}
+            <div class="batch-error-items">
+              {% for failed in group.items %}
+                <a href="{{ failed.url }}">↗ {{ failed.title }}</a>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <details class="batch-error-technical">
+            <summary>Ver detalhe técnico</summary>
+            <p>{{ group.sample }}</p>
+          </details>
+        </div>
       {% endfor %}
     </div>
   </div>
@@ -148,7 +151,8 @@
     </form>
   {% elif batch_manual_count %}
     <div class="batch-manual-note">
-      {{ batch_manual_count }} erro(s) exigem atenção manual
+      <strong>{{ batch_manual_count }} erro(s) exigem atenção manual</strong>
+      <span>Não serão repetidos automaticamente.</span>
     </div>
   {% endif %}
 </section>
