@@ -112,6 +112,19 @@
 </section>
 {% endif %}
 
+{% if batch_error_count %}
+<section class="batch-error-summary" id="batch-error-summary">
+  <div>
+    <strong>⚠️ {{ batch_error_count }} item(ns) do último lote terminaram com erro</strong>
+    <span>Você pode colocar todos novamente na fila sem abrir um por um.</span>
+  </div>
+  <form method="post" action="{% url 'retry_last_batch_errors' %}">
+    {% csrf_token %}
+    <button type="submit" class="primary">↻ Tentar novamente todos</button>
+  </form>
+</section>
+{% endif %}
+
 <section class="section-head">
   <div><p class="eyebrow">RECENTES</p><h2>Últimas capturas</h2></div>
   <a href="{% url 'library' %}">Ver biblioteca →</a>
@@ -261,10 +274,9 @@
         if (finished >= batchItems.length) {
           stopped = true;
           if (batchSummary) batchSummary.textContent = '✓ Lote concluído';
-          const panel = document.getElementById('batch-progress-panel');
-          if (panel) {
-            setTimeout(() => panel.remove(), 1200);
-          }
+          // Recarrega para mostrar o resumo final do lote e, se houver,
+          // o botão único para repetir todos os erros.
+          setTimeout(() => window.location.reload(), 900);
           return;
         }
 
