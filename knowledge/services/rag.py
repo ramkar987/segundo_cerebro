@@ -42,6 +42,8 @@ Regras obrigatórias:
 - Não converta "baixo custo" em "forma de ganhar dinheiro".
 - Não converta "aprender uma habilidade" em "forma de renda" sem o trecho dizer isso.
 - Não converta "anunciar" em "ganhar dinheiro" sem o trecho ligar explicitamente anúncio a receita, vendas ou clientes.
+- Não use conectivos causais como "isso pode gerar", "isso permite ganhar", "por isso dá para lucrar" ou equivalentes, a menos que essa relação esteja explícita no trecho.
+- Preserve a modalidade da fonte: se ela diz que "pessoas estão ganhando dinheiro fazendo X" e depois apresenta uma ferramenta, diga exatamente isso; não conclua que usar a ferramenta, por si só, gera renda.
 - Quando o conteúdo original apenas afirma algo, escreva "a fonte afirma", "o conteúdo sugere" ou equivalente.
 - Se o acervo sustentar apenas uma parte da pergunta, responda somente essa parte e diga que não encontrou suporte para ampliar.
 - Se houver apenas uma fonte realmente útil, uma resposta curta com uma única fonte é MELHOR do que completar com ideias fracas.
@@ -131,21 +133,13 @@ def _candidate_sources(question: str) -> list[dict]:
     if not hits:
         return []
 
-    # Mantém candidatos próximos do melhor resultado. Isso remove a cauda
-    # semântica antes mesmo da triagem por IA.
-    best_score = hits[0].score
-    floor = max(
-        settings.SEMANTIC_MIN_SCORE,
-        best_score - settings.RAG_RELATIVE_SCORE_DROP,
-    )
-
+    # A busca vetorial apenas encontra candidatos. A triagem por IA abaixo
+    # decide relevância direta; não descartamos cedo demais um trecho que pode
+    # ser semanticamente diferente, mas ainda responder exatamente à pergunta.
     candidates = []
     per_item: dict[int, int] = {}
 
     for hit in hits:
-        if hit.score < floor:
-            continue
-
         item_id = hit.chunk.item_id
         count = per_item.get(item_id, 0)
         if count >= settings.RAG_MAX_CHUNKS_PER_ITEM:
