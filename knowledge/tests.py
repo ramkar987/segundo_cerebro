@@ -365,7 +365,7 @@ class RagTests(TestCase):
         SEMANTIC_MIN_SCORE=0.20,
         AI_TIMEOUT=5,
     )
-    @patch('knowledge.services.rag.requests.post')
+    @patch('knowledge.services.groq_http.requests.post')
     @patch('knowledge.services.rag.semantic_search')
     def test_rag_returns_only_approved_used_source(
         self,
@@ -434,7 +434,7 @@ class RagTests(TestCase):
         SEMANTIC_MIN_SCORE=0.20,
         AI_TIMEOUT=5,
     )
-    @patch('knowledge.services.rag.requests.post')
+    @patch('knowledge.services.groq_http.requests.post')
     @patch('knowledge.services.rag.semantic_search')
     def test_rag_declines_when_gate_rejects_candidates(
         self,
@@ -567,3 +567,74 @@ class SemanticLibraryRerankTests(TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]['item'].pk, relevant_item.pk)
         self.assertEqual(results[0]['relevance'], 3)
+
+
+
+class GroqHttpRetryTests(TestCase):
+    @override_settings(
+        GROQ_API_KEY='test-key',
+        AI_TIMEOUT=5,
+    )
+    @patch('knowledge.services.groq_http.time.sleep')
+    @patch('knowledge.services.groq_http.requests.post')
+    def test_retries_rate_limit_using_server_delay(
+        self,
+        mock_post,
+        mock_sleep,
+    ):
+        from .services.groq_http import post_groq
+
+        limited = Mock()
+        limited.status_code = 429
+        limited.headers = {}
+        limited.text = (
+            'Rate limit reached. Limit 8000, Used 7000, '
+            'Requested 2400. Please try again in 8.5s.'
+        )
+
+        success = Mock()
+        success.status_code = 200
+        success.headers = {}
+        success.text = '{}'
+
+        mock_post.side_effect = [limited, success]
+
+        response = post_groq({'model': 'test'}, max_attempts=3)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertTrue(mock_sleep.called)
+
+    @override_settings(
+        GROQ_API_KEY='test-key',
+        AI_TIMEOUT=5,
+    )
+    @patch('knowledge.services.groq_http.time.sleep')
+    @patch('knowledge.services.groq_http.requests.post')
+    def test_retries_json_validation_failure(
+        self,
+        mock_post,
+        mock_sleep,
+    ):
+        from .services.groq_http import post_groq
+
+        invalid = Mock()
+        invalid.status_code = 400
+        invalid.headers = {}
+        invalid.text = (
+            '{"error":{"code":"json_validate_failed",'
+            '"message":"Failed to generate JSON"}}'
+        )
+
+        success = Mock()
+        success.status_code = 200
+        success.headers = {}
+        success.text = '{}'
+
+        mock_post.side_effect = [invalid, success]
+
+        response = post_groq({'model': 'test'}, max_attempts=3)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertTrue(mock_sleep.called)
