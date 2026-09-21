@@ -114,9 +114,30 @@
 
 {% if batch_error_count and not batch_items %}
 <section class="batch-error-summary" id="batch-error-summary">
-  <div>
+  <div class="batch-error-summary-main">
     <strong>⚠️ {{ batch_error_count }} item(ns) do último lote terminaram com erro</strong>
-    <span>Você pode colocar todos novamente na fila sem abrir um por um.</span>
+    <span>Veja abaixo os motivos agrupados antes de tentar novamente.</span>
+
+    <div class="batch-error-groups">
+      {% for group in batch_error_groups %}
+        <details class="batch-error-group">
+          <summary>
+            <span>{{ group.label }}</span>
+            <strong>{{ group.count }}×</strong>
+          </summary>
+          <div class="batch-error-group-body">
+            <p>{{ group.sample }}</p>
+            {% if group.items %}
+              <div class="batch-error-items">
+                {% for failed in group.items %}
+                  <a href="{{ failed.url }}">{{ failed.title }}</a>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        </details>
+      {% endfor %}
+    </div>
   </div>
   <form method="post" action="{% url 'retry_last_batch_errors' %}">
     {% csrf_token %}
