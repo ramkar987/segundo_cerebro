@@ -124,6 +124,31 @@ def home(request):
 
     batch_ids = request.session.get('last_batch_ids', [])
     batch_items = []
+    batch_error_items = []
+
+    # Se a sessão já foi limpa, recupera o lote mais recente pelo batch_id
+    # persistido nos metadados da captura.
+    if not batch_ids:
+        latest_batch_item = (
+            Item.objects.select_related('source')
+            .filter(source__metadata__capture_mode='batch')
+            .order_by('-created_at')
+            .first()
+        )
+        latest_batch_id = (
+            (latest_batch_item.source.metadata or {}).get('batch_id')
+            if latest_batch_item
+            else ''
+        )
+        if latest_batch_id:
+            batch_ids = list(
+                Item.objects.filter(
+                    source__metadata__batch_id=latest_batch_id
+                ).values_list('id', flat=True)
+            )
+            if batch_ids:
+                request.session['last_batch_ids'] = batch_ids
+
     if batch_ids:
         found = {
             item.pk: item
@@ -148,8 +173,15 @@ def home(request):
             if item_id in found
             and found[item_id].status == Item.Status.PROCESSING
         ]
+        batch_error_items = [
+            found[item_id]
+            for item_id in batch_ids
+            if item_id in found
+            and found[item_id].status == Item.Status.ERROR
+        ]
 
-        if not batch_items:
+        # Sem andamento e sem erros, o lote já não precisa ocupar a home.
+        if not batch_items and not batch_error_items:
             request.session.pop('last_batch_ids', None)
 
     return render(
@@ -160,6 +192,8 @@ def home(request):
             'batch_form': batch_form,
             'batch_open': mode == 'batch',
             'batch_items': batch_items,
+            'batch_error_items': batch_error_items,
+            'batch_error_count': len(batch_error_items),
             'recent': recent,
         },
     )
@@ -344,25 +378,26 @@ def toggle_favorite(request, pk):
     )
 
 
-@require_POST
-def retry_item(request, pk):
-    item = get_object_or_404(Item, pk=pk)
-
+def _queue_item_retry(item: Item) -> bool:
+    """Coloca um item com erro de volta na fila. Retorna True se enfileirou."""
     if item.status != Item.Status.ERROR:
-        messages.info(request, 'Este item não está com erro.')
-        return redirect(item)
+        return False
 
     has_active_job = item.jobs.filter(
-        state__in=[ProcessingJob.State.PENDING, ProcessingJob.State.RUNNING]
+        state__in=[
+            ProcessingJob.State.PENDING,
+            ProcessingJob.State.RUNNING,
+        ]
     ).exists()
+    if has_active_job:
+        return False
 
-    if not has_active_job:
-        kind = (
-            ProcessingJob.Kind.EXTRACT
-            if item.source_url
-            else ProcessingJob.Kind.ANALYZE
-        )
-        ProcessingJob.objects.create(item=item, kind=kind)
+    kind = (
+        ProcessingJob.Kind.EXTRACT
+        if item.source_url
+        else ProcessingJob.Kind.ANALYZE
+    )
+    ProcessingJob.objects.create(item=item, kind=kind)
 
     item.status = Item.Status.PROCESSING
     item.processing_progress = 5 if item.source_url else 70
@@ -379,9 +414,66 @@ def retry_item(request, pk):
             'updated_at',
         ]
     )
+    return True
 
-    messages.success(request, 'Nova tentativa colocada na fila.')
+
+@require_POST
+def retry_item(request, pk):
+    item = get_object_or_404(Item, pk=pk)
+
+    if _queue_item_retry(item):
+        messages.success(request, 'Nova tentativa colocada na fila.')
+    else:
+        messages.info(request, 'Este item não está com erro ou já está na fila.')
     return redirect(item)
+
+
+@require_POST
+def retry_last_batch_errors(request):
+    batch_ids = request.session.get('last_batch_ids', [])
+
+    if not batch_ids:
+        latest_batch_item = (
+            Item.objects.select_related('source')
+            .filter(source__metadata__capture_mode='batch')
+            .order_by('-created_at')
+            .first()
+        )
+        batch_id = (
+            (latest_batch_item.source.metadata or {}).get('batch_id')
+            if latest_batch_item
+            else ''
+        )
+        if batch_id:
+            batch_ids = list(
+                Item.objects.filter(
+                    source__metadata__batch_id=batch_id
+                ).values_list('id', flat=True)
+            )
+            request.session['last_batch_ids'] = batch_ids
+
+    if not batch_ids:
+        messages.info(request, 'Não encontrei um lote recente para tentar novamente.')
+        return redirect('home')
+
+    failed_items = list(
+        Item.objects.filter(
+            pk__in=batch_ids,
+            status=Item.Status.ERROR,
+        ).order_by('created_at')
+    )
+
+    queued = sum(1 for item in failed_items if _queue_item_retry(item))
+
+    if queued:
+        messages.success(
+            request,
+            f'{queued} item(ns) com erro voltaram para a fila.',
+        )
+    else:
+        messages.info(request, 'Não há itens com erro neste lote.')
+
+    return redirect('home')
 
 
 @require_POST
