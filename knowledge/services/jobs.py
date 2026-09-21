@@ -209,6 +209,11 @@ def _process_analysis_job(job: ProcessingJob) -> None:
 def _process_relation_job(job: ProcessingJob) -> None:
     item = job.item
 
+    # Compatibilidade com itens que chegaram a 92–94% na versão anterior:
+    # conclui a captura antes de executar o enriquecimento de relações.
+    if item.status == Item.Status.PROCESSING:
+        _complete_item(item)
+
     try:
         created = discover_relations(item)
         _finish_job(job, f'{len(created)} conexão(ões) criada(s).')
