@@ -99,6 +99,10 @@ GEMINI_VISION_MODEL = os.getenv(
     'GEMINI_VISION_MODEL',
     'gemini-3.5-flash-lite',
 ).strip()
+GEMINI_TEXT_MODEL = os.getenv(
+    'GEMINI_TEXT_MODEL',
+    GEMINI_VISION_MODEL,
+).strip()
 ANALYZE_IMAGES = os.getenv('ANALYZE_IMAGES', '1') == '1'
 MAX_INSTAGRAM_IMAGES = int(os.getenv('MAX_INSTAGRAM_IMAGES', '20'))
 MAX_VISION_IMAGE_BYTES = int(os.getenv('MAX_VISION_IMAGE_BYTES', str(15 * 1024 * 1024)))
