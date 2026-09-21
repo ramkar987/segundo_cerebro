@@ -455,22 +455,22 @@ def reject_relation(request, pk):
     relation = get_object_or_404(Relation, pk=pk)
     relation.status = Relation.Status.REJECTED
     relation.save(update_fields=['status'])
-    messages.info(request, 'Sugestão de relação rejeitada.')
+    messages.info(request, 'Conexão removida. Ela não será sugerida novamente.')
     return HttpResponseRedirect(
         request.META.get('HTTP_REFERER') or relation.source.get_absolute_url()
     )
 
 
 def connections(request):
-    confirmed = (
-        Relation.objects.filter(status=Relation.Status.CONFIRMED)
+    active_relations = (
+        Relation.objects.filter(
+            status__in=[
+                Relation.Status.CONFIRMED,
+                Relation.Status.SUGGESTED,
+            ]
+        )
         .select_related('source', 'target')
-        .order_by('-created_at')[:250]
-    )
-    suggested = (
-        Relation.objects.filter(status=Relation.Status.SUGGESTED)
-        .select_related('source', 'target')
-        .order_by('-confidence', '-created_at')[:100]
+        .order_by('-confidence', '-created_at')[:250]
     )
     analyzed_items = Item.objects.exclude(analysis={}).count()
 
@@ -478,10 +478,8 @@ def connections(request):
         request,
         'knowledge/connections.html',
         {
-            'confirmed_relations': confirmed,
-            'suggested_relations': suggested,
+            'active_relations': active_relations,
             'analyzed_items': analyzed_items,
-            'confirmed_count': confirmed.count(),
-            'suggested_count': suggested.count(),
+            'connection_count': active_relations.count(),
         },
     )
