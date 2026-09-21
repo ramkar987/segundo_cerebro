@@ -278,6 +278,23 @@ def answer_from_library(question: str) -> dict:
             if source['number'] in used
         ]
 
+    # Garante auditabilidade mesmo se o modelo esquecer a marcação no texto.
+    cited = {
+        int(value)
+        for value in re.findall(r'\[(\d+)\]', answer)
+    }
+    source_numbers = [source['number'] for source in sources]
+    missing_citations = [
+        number for number in source_numbers if number not in cited
+    ]
+    if missing_citations:
+        answer = answer.rstrip()
+        if answer and answer[-1] not in '.!?':
+            answer += '.'
+        answer += ' ' + ' '.join(
+            f'[{number}]' for number in missing_citations
+        )
+
     return {
         'answer': answer,
         'sources': sources,
