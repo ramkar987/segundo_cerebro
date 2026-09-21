@@ -638,3 +638,53 @@ class GroqHttpRetryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_post.call_count, 2)
         self.assertTrue(mock_sleep.called)
+
+
+
+class RagProviderFallbackTests(TestCase):
+    @override_settings(
+        GROQ_API_KEY='groq-test',
+        GEMINI_API_KEY='gemini-test',
+        GROQ_CHAT_MODEL='groq-model',
+        GEMINI_TEXT_MODEL='gemini-model',
+        AI_TIMEOUT=5,
+    )
+    @patch('knowledge.services.rag.requests.post')
+    @patch('knowledge.services.rag.post_groq')
+    def test_rag_falls_back_to_gemini_when_groq_is_busy(
+        self,
+        mock_groq,
+        mock_gemini,
+    ):
+        from .services.rag import _chat_json
+
+        groq_response = Mock()
+        groq_response.status_code = 429
+        groq_response.text = 'rate limit'
+        mock_groq.return_value = groq_response
+
+        gemini_response = Mock()
+        gemini_response.status_code = 200
+        gemini_response.json.return_value = {
+            'candidates': [
+                {
+                    'content': {
+                        'parts': [
+                            {'text': '{"ok":true}'}
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_gemini.return_value = gemini_response
+
+        data, provider = _chat_json(
+            'sistema',
+            'pergunta',
+            max_tokens=100,
+        )
+
+        self.assertEqual(data, {'ok': True})
+        self.assertIn('Gemini', provider)
+        self.assertEqual(mock_groq.call_count, 1)
+        self.assertEqual(mock_gemini.call_count, 1)
