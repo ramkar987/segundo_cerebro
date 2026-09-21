@@ -17,6 +17,43 @@ from .services.semantic import (
 )
 
 
+def _is_retryable_processing_error(error: str) -> bool:
+    text = (error or '').casefold()
+
+    # Rate limit, timeouts e indisponibilidade temporária devem ser repetidos.
+    if any(token in text for token in (
+        '429',
+        'rate limit',
+        'too many requests',
+        'timed out',
+        'timeout',
+        '500',
+        '502',
+        '503',
+        '504',
+        'json_validate_failed',
+        'failed to generate json',
+        'failed to validate json',
+    )):
+        return True
+
+    # Estes erros do Instagram normalmente dependem de autenticação,
+    # disponibilidade do post ou mudança no extractor; repetir em massa
+    # tende apenas a falhar novamente.
+    if 'instagram sent an empty media response' in text:
+        return False
+    if any(token in text for token in (
+        'login required',
+        'private post',
+        'private video',
+        'content is not available',
+    )):
+        return False
+
+    # Para causas desconhecidas, mantém a possibilidade de nova tentativa.
+    return True
+
+
 def _classify_processing_error(error: str) -> str:
     text = (error or '').casefold()
 
@@ -49,6 +86,7 @@ def _batch_error_groups(items: list[Item]) -> list[dict]:
             or 'Erro sem detalhes registrados.'
         )
         label = _classify_processing_error(error)
+        retryable = _is_retryable_processing_error(error)
         group = groups.setdefault(
             label,
             {
@@ -56,9 +94,15 @@ def _batch_error_groups(items: list[Item]) -> list[dict]:
                 'count': 0,
                 'sample': error[:700],
                 'items': [],
+                'retryable_count': 0,
+                'manual_count': 0,
             },
         )
         group['count'] += 1
+        if retryable:
+            group['retryable_count'] += 1
+        else:
+            group['manual_count'] += 1
         if len(group['items']) < 6:
             group['items'].append({
                 'title': item.title or f'Item #{item.pk}',
@@ -535,15 +579,41 @@ def retry_last_batch_errors(request):
         ).order_by('created_at')
     )
 
-    queued = sum(1 for item in failed_items if _queue_item_retry(item))
+    retryable_items = []
+    skipped_manual = 0
+    for item in failed_items:
+        last_error = (
+            item.jobs.filter(state=ProcessingJob.State.ERROR)
+            .order_by('-finished_at', '-id')
+            .values_list('error', flat=True)
+            .first()
+            or ''
+        )
+        if _is_retryable_processing_error(last_error):
+            retryable_items.append(item)
+        else:
+            skipped_manual += 1
+
+    queued = sum(1 for item in retryable_items if _queue_item_retry(item))
 
     if queued:
         messages.success(
             request,
-            f'{queued} item(ns) com erro voltaram para a fila.',
+            f'{queued} item(ns) com erro transitório voltaram para a fila.',
         )
-    else:
+    elif not failed_items:
         messages.info(request, 'Não há itens com erro neste lote.')
+    else:
+        messages.info(
+            request,
+            'Os erros restantes exigem atenção manual e não foram repetidos automaticamente.',
+        )
+
+    if skipped_manual:
+        messages.warning(
+            request,
+            f'{skipped_manual} item(ns) foram mantidos com erro porque repetir automaticamente provavelmente não resolveria.',
+        )
 
     return redirect('home')
 
