@@ -233,7 +233,7 @@ def discover_relations(item: Item) -> list[Relation]:
                 target=target,
                 relation_type=relation_type,
                 origin=Relation.Origin.AI,
-                status=Relation.Status.SUGGESTED,
+                status=Relation.Status.CONFIRMED,
                 confidence=confidence,
                 explanation=explanation,
             )
