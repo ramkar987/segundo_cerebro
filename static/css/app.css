@@ -523,3 +523,39 @@ html[data-theme="dark"] .relation-more-menu .danger-action{
     width:100%;
   }
 }
+
+
+.batch-error-summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  margin:18px 0 30px;
+  padding:16px 18px;
+  border:1px solid #d7a33d;
+  border-radius:14px;
+  background:var(--panel);
+  box-shadow:var(--shadow);
+}
+.batch-error-summary>div{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.batch-error-summary span{
+  color:var(--muted);
+  font-size:13px;
+}
+.batch-error-summary form{
+  margin:0;
+  flex:0 0 auto;
+}
+@media(max-width:650px){
+  .batch-error-summary{
+    align-items:stretch;
+    flex-direction:column;
+  }
+  .batch-error-summary button{
+    width:100%;
+  }
+}
