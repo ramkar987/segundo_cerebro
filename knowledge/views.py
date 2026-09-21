@@ -283,6 +283,14 @@ def home(request):
         if not batch_items and not batch_error_items:
             request.session.pop('last_batch_ids', None)
 
+    batch_error_groups = _batch_error_groups(batch_error_items)
+    batch_retryable_count = sum(
+        group['retryable_count'] for group in batch_error_groups
+    )
+    batch_manual_count = sum(
+        group['manual_count'] for group in batch_error_groups
+    )
+
     return render(
         request,
         'knowledge/home.html',
@@ -293,7 +301,9 @@ def home(request):
             'batch_items': batch_items,
             'batch_error_items': batch_error_items,
             'batch_error_count': len(batch_error_items),
-            'batch_error_groups': _batch_error_groups(batch_error_items),
+            'batch_error_groups': batch_error_groups,
+            'batch_retryable_count': batch_retryable_count,
+            'batch_manual_count': batch_manual_count,
             'recent': recent,
         },
     )
