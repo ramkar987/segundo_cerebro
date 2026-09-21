@@ -87,6 +87,12 @@ class Command(BaseCommand):
             default=2.0,
             help='Segundos entre verificações quando a fila está vazia.',
         )
+        parser.add_argument(
+            '--job-delay',
+            type=float,
+            default=settings.WORKER_JOB_DELAY,
+            help='Segundos de pausa entre jobs consecutivos.',
+        )
 
     def handle(self, *args, **options):
         try:
@@ -140,3 +146,6 @@ class Command(BaseCommand):
 
             if options['once']:
                 return
+
+            if job and options['job_delay'] > 0:
+                time.sleep(options['job_delay'])
