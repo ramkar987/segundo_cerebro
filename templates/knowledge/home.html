@@ -112,7 +112,7 @@
 </section>
 {% endif %}
 
-{% if batch_error_count %}
+{% if batch_error_count and not batch_items %}
 <section class="batch-error-summary" id="batch-error-summary">
   <div>
     <strong>⚠️ {{ batch_error_count }} item(ns) do último lote terminaram com erro</strong>
