@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
+import requests
 from django.conf import settings
 
 from .groq_http import post_groq
@@ -81,44 +83,163 @@ def _source_locator(chunk) -> str:
     return chunk.get_kind_display().lower()
 
 
-def _chat_json(system_prompt: str, user_content: str, max_tokens: int) -> dict:
-    response = post_groq({
-        'model': settings.GROQ_CHAT_MODEL,
-        'messages': [
-            {'role': 'system', 'content': system_prompt},
-            {'role': 'user', 'content': user_content},
-        ],
-        'response_format': {'type': 'json_object'},
-        'reasoning_effort': 'low',
-        'temperature': 0.0,
-        'max_completion_tokens': max_tokens,
-    })
-
-    if response.status_code >= 400:
-        raise RagUnavailable(
-            f'Groq retornou HTTP {response.status_code}: {response.text[:1000]}'
-        )
-
-    raw = (
-        response.json()
-        .get('choices', [{}])[0]
-        .get('message', {})
-        .get('content', '')
-        .strip()
-    )
+def _parse_json_object(raw: str, provider: str) -> dict:
+    raw = (raw or '').strip()
     if not raw:
-        raise RagUnavailable('A IA não retornou uma resposta.')
+        raise RagUnavailable(f'{provider} não retornou uma resposta.')
 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise RagUnavailable(
-            f'A IA retornou JSON inválido: {raw[:800]}'
+            f'{provider} retornou JSON inválido: {raw[:800]}'
         ) from exc
 
     if not isinstance(data, dict):
-        raise RagUnavailable('A IA retornou um formato inesperado.')
+        raise RagUnavailable(f'{provider} retornou um formato inesperado.')
     return data
+
+
+def _gemini_chat_json(
+    system_prompt: str,
+    user_content: str,
+    max_tokens: int,
+) -> tuple[dict, str]:
+    if not settings.GEMINI_API_KEY:
+        raise RagUnavailable('Gemini não está configurado como fallback.')
+
+    endpoint = (
+        'https://generativelanguage.googleapis.com/v1beta/models/'
+        f'{settings.GEMINI_TEXT_MODEL}:generateContent'
+    )
+
+    response = None
+    for attempt in range(2):
+        response = requests.post(
+            endpoint,
+            headers={
+                'x-goog-api-key': settings.GEMINI_API_KEY,
+                'Content-Type': 'application/json',
+            },
+            json={
+                'system_instruction': {
+                    'parts': [{'text': system_prompt}],
+                },
+                'contents': [
+                    {
+                        'role': 'user',
+                        'parts': [{'text': user_content}],
+                    }
+                ],
+                'generationConfig': {
+                    'temperature': 0.0,
+                    'maxOutputTokens': max_tokens,
+                    'responseMimeType': 'application/json',
+                },
+            },
+            timeout=settings.AI_TIMEOUT,
+        )
+
+        if response.status_code != 429 or attempt >= 1:
+            break
+
+        retry_after = response.headers.get('Retry-After')
+        try:
+            wait_seconds = float(retry_after) if retry_after else 3.0
+        except (TypeError, ValueError):
+            wait_seconds = 3.0
+        time.sleep(max(1.0, min(wait_seconds, 10.0)))
+
+    if response is None or response.status_code >= 400:
+        status = response.status_code if response is not None else 'sem resposta'
+        detail = response.text[:900] if response is not None else ''
+        raise RagUnavailable(
+            f'Gemini retornou HTTP {status}: {detail}'
+        )
+
+    body = response.json()
+    candidates = body.get('candidates') or []
+    if not candidates:
+        raise RagUnavailable(
+            f'Gemini não retornou candidato: {json.dumps(body)[:800]}'
+        )
+
+    parts = candidates[0].get('content', {}).get('parts', [])
+    raw = ''.join(
+        str(part.get('text') or '')
+        for part in parts
+        if isinstance(part, dict)
+    ).strip()
+
+    return (
+        _parse_json_object(raw, 'Gemini'),
+        f'Gemini · {settings.GEMINI_TEXT_MODEL}',
+    )
+
+
+def _chat_json(
+    system_prompt: str,
+    user_content: str,
+    max_tokens: int,
+) -> tuple[dict, str]:
+    groq_error = ''
+
+    if settings.GROQ_API_KEY:
+        try:
+            # Consulta interativa: não fica aguardando vários retries enquanto
+            # o worker consome a mesma cota. Se Groq estiver ocupada, cai logo
+            # para Gemini.
+            response = post_groq(
+                {
+                    'model': 'Groq/Gemini',
+                    'messages': [
+                        {'role': 'system', 'content': system_prompt},
+                        {'role': 'user', 'content': user_content},
+                    ],
+                    'response_format': {'type': 'json_object'},
+                    'reasoning_effort': 'low',
+                    'temperature': 0.0,
+                    'max_completion_tokens': max_tokens,
+                },
+                max_attempts=1,
+            )
+
+            if response.status_code < 400:
+                raw = (
+                    response.json()
+                    .get('choices', [{}])[0]
+                    .get('message', {})
+                    .get('content', '')
+                    .strip()
+                )
+                return (
+                    _parse_json_object(raw, 'Groq'),
+                    f'Groq · {settings.GROQ_CHAT_MODEL}',
+                )
+
+            groq_error = (
+                f'Groq HTTP {response.status_code}: {response.text[:700]}'
+            )
+        except Exception as exc:
+            groq_error = f'Groq: {exc}'
+
+    if settings.GEMINI_API_KEY:
+        try:
+            return _gemini_chat_json(
+                system_prompt,
+                user_content,
+                max_tokens,
+            )
+        except RagUnavailable as exc:
+            if groq_error:
+                raise RagUnavailable(
+                    f'{groq_error} | Fallback Gemini: {exc}'
+                ) from exc
+            raise
+
+    if groq_error:
+        raise RagUnavailable(groq_error)
+    raise RagUnavailable('Nenhum provedor de IA configurado para o RAG.')
 
 
 def _candidate_sources(question: str) -> list[dict]:
@@ -181,7 +302,7 @@ def _relevance_gate(question: str, candidates: list[dict]) -> list[dict]:
         + '\n\n---\n\n'.join(blocks)
     )
 
-    data = _chat_json(
+    data, _provider = _chat_json(
         RELEVANCE_SYSTEM_PROMPT,
         payload,
         max_tokens=350,
@@ -203,8 +324,8 @@ def _relevance_gate(question: str, candidates: list[dict]) -> list[dict]:
 
 
 def answer_from_library(question: str) -> dict:
-    if not settings.GROQ_API_KEY:
-        raise RagUnavailable('GROQ_API_KEY não configurada.')
+    if not settings.GROQ_API_KEY and not settings.GEMINI_API_KEY:
+        raise RagUnavailable('Nenhum provedor de IA configurado para o RAG.')
 
     candidates = _candidate_sources(question)
     relevant = _relevance_gate(question, candidates)
@@ -240,7 +361,7 @@ def answer_from_library(question: str) -> dict:
         + '\n\n---\n\n'.join(context_blocks)
     )
 
-    data = _chat_json(
+    data, provider_model = _chat_json(
         RAG_SYSTEM_PROMPT,
         payload,
         max_tokens=1200,
@@ -290,5 +411,5 @@ def answer_from_library(question: str) -> dict:
     return {
         'answer': answer,
         'sources': sources,
-        'model': settings.GROQ_CHAT_MODEL,
+        'model': provider_model,
     }
