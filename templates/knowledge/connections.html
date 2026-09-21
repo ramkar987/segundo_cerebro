@@ -14,87 +14,28 @@
     <span>itens analisados</span>
   </div>
   <div class="stat-card">
-    <strong>{{ suggested_count }}</strong>
-    <span>sugestões pendentes</span>
-  </div>
-  <div class="stat-card">
-    <strong>{{ confirmed_count }}</strong>
-    <span>relações confirmadas</span>
+    <strong>{{ connection_count }}</strong>
+    <span>conexões encontradas</span>
   </div>
 </div>
 
 <section class="detail-section">
   <div class="section-head">
     <div>
-      <p class="eyebrow">SUGESTÕES</p>
-      <h2>Conexões encontradas pela IA</h2>
-    </div>
-  </div>
-
-  <div class="relations">
-    {% for relation in suggested_relations %}
-      <div class="relation-card">
-        <div class="relation-pair">
-          <a href="{{ relation.source.get_absolute_url }}"><strong>{{ relation.source.title }}</strong></a>
-          <span class="relation-type">{{ relation.get_relation_type_display }}</span>
-          <a href="{{ relation.target.get_absolute_url }}"><strong>{{ relation.target.title }}</strong></a>
-        </div>
-
-        <div class="card-meta">
-          <span>✨ Sugerida pela IA</span>
-          {% if relation.confidence %}
-            <span>confiança {% widthratio relation.confidence 1 100 %}%</span>
-          {% endif %}
-        </div>
-
-        {% if relation.explanation %}
-          <p class="muted">{{ relation.explanation }}</p>
-        {% endif %}
-
-        <div class="relation-actions">
-          <form method="post" action="{% url 'confirm_relation' relation.pk %}">
-            {% csrf_token %}
-            <button type="submit">✓ Confirmar</button>
-          </form>
-          <form method="post" action="{% url 'reject_relation' relation.pk %}">
-            {% csrf_token %}
-            <button type="submit">✕ Rejeitar</button>
-          </form>
-        </div>
-      </div>
-    {% empty %}
-      <div class="empty">
-        {% if analyzed_items < 2 %}
-          São necessários pelo menos 2 conteúdos analisados para descobrir relações.
-        {% else %}
-          Ainda não há sugestões pendentes. O sistema só cria conexões quando encontra uma relação suficientemente forte.
-        {% endif %}
-      </div>
-    {% endfor %}
-  </div>
-</section>
-
-<section class="detail-section">
-  <div class="section-head">
-    <div>
-      <p class="eyebrow">CONFIRMADAS</p>
-      <h2>Relações que fazem parte do seu mapa</h2>
+      <p class="eyebrow">CONEXÕES</p>
+      <h2>Relações encontradas automaticamente</h2>
     </div>
   </div>
 
   <div class="relations big">
-    {% for relation in confirmed_relations %}
+    {% for relation in active_relations %}
       <div class="relation-card confirmed-relation-card">
         <details class="relation-more">
           <summary title="Mais opções" aria-label="Mais opções">⋯</summary>
           <div class="relation-more-menu">
-            <form method="post" action="{% url 'unconfirm_relation' relation.pk %}">
-              {% csrf_token %}
-              <button type="submit">Desfazer confirmação</button>
-            </form>
             <form method="post" action="{% url 'reject_relation' relation.pk %}">
               {% csrf_token %}
-              <button type="submit" class="danger-action">Rejeitar relação</button>
+              <button type="submit" class="danger-action">Remover conexão</button>
             </form>
           </div>
         </details>
@@ -104,17 +45,33 @@
           <span class="relation-type">{{ relation.get_relation_type_display }}</span>
           <a href="{{ relation.target.get_absolute_url }}"><strong>{{ relation.target.title }}</strong></a>
         </div>
+
+        <div class="card-meta">
+          {% if relation.origin == 'ai' %}
+            <span>✨ Encontrada pela IA</span>
+          {% endif %}
+          {% if relation.confidence %}
+            <span>confiança {% widthratio relation.confidence 1 100 %}%</span>
+          {% endif %}
+        </div>
+
         {% if relation.explanation %}
           <p class="muted">{{ relation.explanation }}</p>
         {% endif %}
       </div>
     {% empty %}
-      <div class="empty">Nenhuma relação confirmada ainda.</div>
+      <div class="empty">
+        {% if analyzed_items < 2 %}
+          São necessários pelo menos 2 conteúdos analisados para descobrir conexões.
+        {% else %}
+          Ainda não foram encontradas conexões suficientemente fortes entre os conteúdos.
+        {% endif %}
+      </div>
     {% endfor %}
   </div>
 </section>
 
 <p class="muted connection-footnote">
-  O grafo visual entra depois. Primeiro validamos as conexões sugeridas para evitar um mapa cheio de relações ruins.
+  As conexões são criadas automaticamente. Se alguma não fizer sentido, use o menu ⋯ para removê-la.
 </p>
 {% endblock %}
