@@ -174,7 +174,7 @@ def discover_relations(item: Item) -> list[Relation]:
         'reasoning_effort': 'low',
         'temperature': 0.1,
         'max_completion_tokens': 1200,
-    })
+    }, min_interval=settings.GROQ_WORKER_MIN_INTERVAL)
 
     if response.status_code >= 400:
         raise RuntimeError(
