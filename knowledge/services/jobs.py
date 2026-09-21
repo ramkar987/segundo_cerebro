@@ -212,7 +212,7 @@ def _process_relation_job(job: ProcessingJob) -> None:
 
     try:
         created = discover_relations(item)
-        _finish_job(job, f'{len(created)} relação(ões) sugerida(s).')
+        _finish_job(job, f'{len(created)} conexão(ões) criada(s).')
         _complete_item(item)
     except RelationDiscoverySkipped as exc:
         _finish_job(job, str(exc))
