@@ -13,16 +13,21 @@ class RagUnavailable(Exception):
     pass
 
 
-RELEVANCE_SYSTEM_PROMPT = """Você faz triagem de trechos para um RAG pessoal.
+RELEVANCE_SYSTEM_PROMPT = """Você faz triagem ESTRITA de trechos para um RAG pessoal.
 
-Sua única tarefa é decidir quais trechos respondem DIRETAMENTE à pergunta.
+Sua única tarefa é decidir quais trechos respondem DIRETAMENTE à pergunta, sem completar a relação por conhecimento externo.
 
 Regras:
-- Marque como relevante apenas o trecho que contenha informação que realmente ajude a responder à pergunta.
-- Não aceite um trecho só porque pertence ao mesmo tema geral.
-- Não suponha formas de ganhar dinheiro, benefícios, consequências, usos ou conclusões que o trecho não diga.
-- Se a pergunta for sobre "formas de ganhar dinheiro", um trecho sobre aprender programação NÃO é suficiente, a menos que o próprio trecho relacione explicitamente programação com renda, trabalho, clientes, venda, monetização ou equivalente.
-- Prefira poucos trechos fortes a muitos trechos vagamente relacionados.
+- Marque como relevante somente quando o PRÓPRIO TRECHO contém a informação necessária para responder à pergunta.
+- Mesmo tema, mesma área ou palavras parecidas NÃO bastam.
+- Exija que a relação entre a ação e o objetivo perguntado esteja explícita no trecho.
+- Se a pergunta for "como ganhar dinheiro", "como gerar renda", "como monetizar" ou equivalente:
+  * ACEITE somente trechos que relacionem explicitamente uma ação a ganhar dinheiro, renda, receita, lucro, venda, cliente, cobrança, monetização ou equivalente.
+  * REJEITE trechos que apenas falem em gastar pouco, investir pouco, anunciar, aprender uma habilidade, usar uma ferramenta, fazer marketing ou criar conteúdo sem dizer que isso gera renda/receita/vendas/clientes.
+  * "Anunciar custa R$ 40 por dia" NÃO é evidência de como ganhar dinheiro.
+  * "Um site ensina programação" NÃO é evidência de como ganhar dinheiro.
+- Se a pergunta pede causa, benefício, risco, comparação, passo a passo ou recomendação, o trecho precisa sustentar exatamente esse tipo de resposta.
+- Prefira 1 ou 2 fontes fortes a várias fontes apenas relacionadas.
 - Se nenhum trecho responder diretamente, retorne lista vazia.
 - Retorne somente JSON válido no formato {"relevant_sources":[1,2]}.
 """
@@ -32,13 +37,18 @@ RAG_SYSTEM_PROMPT = """Você responde perguntas usando EXCLUSIVAMENTE os trechos
 
 Regras obrigatórias:
 - Não use conhecimento externo.
-- Não transforme conteúdo adjacente em conselho, estratégia, benefício ou conclusão.
+- Não transforme conteúdo adjacente em conselho, estratégia, benefício, consequência ou conclusão.
 - Só afirme algo que esteja diretamente sustentado por um trecho fornecido.
-- Quando o conteúdo original apenas afirma algo, deixe claro que é uma afirmação da fonte.
-- Se os trechos não forem suficientes para responder por completo, diga exatamente o que o acervo sustenta e o que não sustenta.
+- Não converta "baixo custo" em "forma de ganhar dinheiro".
+- Não converta "aprender uma habilidade" em "forma de renda" sem o trecho dizer isso.
+- Não converta "anunciar" em "ganhar dinheiro" sem o trecho ligar explicitamente anúncio a receita, vendas ou clientes.
+- Quando o conteúdo original apenas afirma algo, escreva "a fonte afirma", "o conteúdo sugere" ou equivalente.
+- Se o acervo sustentar apenas uma parte da pergunta, responda somente essa parte e diga que não encontrou suporte para ampliar.
+- Se houver apenas uma fonte realmente útil, uma resposta curta com uma única fonte é MELHOR do que completar com ideias fracas.
 - Cite cada afirmação relevante com [1], [2], [3] etc.
 - NÃO use Markdown: não use **, #, tabelas com |, listas com -, ou blocos de código.
 - Escreva em português do Brasil, em texto simples, com parágrafos curtos.
+- Evite frases como "estratégias aprovadas". Prefira "No acervo, encontrei..." ou "A fonte afirma...".
 - Retorne somente JSON válido no formato:
   {"answer":"texto da resposta com citações [1]","used_sources":[1]}
 - used_sources deve conter somente números realmente citados na resposta.
