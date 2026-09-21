@@ -83,6 +83,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Limites iniciais, ajustáveis via ambiente.
 MAX_CAPTURE_CHARS = int(os.getenv('MAX_CAPTURE_CHARS', '200000'))
 WEB_FETCH_TIMEOUT = int(os.getenv('WEB_FETCH_TIMEOUT', '20'))
+WORKER_JOB_DELAY = float(os.getenv('WORKER_JOB_DELAY', '5.0'))
 
 # Transcrição. Sem GROQ_API_KEY a captura continua funcionando; apenas pula áudio.
 GROQ_API_KEY = os.getenv('GROQ_API_KEY', '').strip()
