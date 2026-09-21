@@ -193,6 +193,59 @@ class BatchCaptureViewTests(TestCase):
         self.assertEqual(Item.objects.count(), 1)
 
 
+    def test_retry_last_batch_errors_requeues_only_that_batch(self):
+        batch_error = Item.objects.create(
+            type=Item.Type.WEB,
+            title='Erro do lote',
+            source_url='https://example.com/erro-lote',
+            status=Item.Status.ERROR,
+            processing_progress=100,
+        )
+        ItemSource.objects.create(
+            item=batch_error,
+            platform='web',
+            metadata={
+                'capture_mode': 'batch',
+                'batch_id': 'lote-atual',
+            },
+        )
+
+        other_error = Item.objects.create(
+            type=Item.Type.WEB,
+            title='Erro de outro lote',
+            source_url='https://example.com/outro-erro',
+            status=Item.Status.ERROR,
+            processing_progress=100,
+        )
+        ItemSource.objects.create(
+            item=other_error,
+            platform='web',
+            metadata={
+                'capture_mode': 'batch',
+                'batch_id': 'lote-antigo',
+            },
+        )
+
+        session = self.client.session
+        session['last_batch_ids'] = [batch_error.pk]
+        session.save()
+
+        response = self.client.post('/lote/tentar-erros-novamente/')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/')
+
+        batch_error.refresh_from_db()
+        other_error.refresh_from_db()
+
+        self.assertEqual(batch_error.status, Item.Status.PROCESSING)
+        self.assertEqual(other_error.status, Item.Status.ERROR)
+
+        job = ProcessingJob.objects.get(item=batch_error)
+        self.assertEqual(job.kind, ProcessingJob.Kind.EXTRACT)
+        self.assertEqual(job.state, ProcessingJob.State.PENDING)
+
+
 
 class SemanticSearchTests(TestCase):
     def setUp(self):
