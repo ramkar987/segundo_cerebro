@@ -4,11 +4,11 @@ import json
 import re
 import unicodedata
 
-import requests
 from django.conf import settings
 from django.db.models import Q
 
 from ..models import Item, Relation
+from .groq_http import post_groq
 
 
 class RelationDiscoverySkipped(Exception):
@@ -158,31 +158,23 @@ def discover_relations(item: Item) -> list[Relation]:
         candidate_payload.append(profile)
         allowed_ids.add(other.id)
 
-    response = requests.post(
-        'https://api.groq.com/openai/v1/chat/completions',
-        headers={
-            'Authorization': f'Bearer {settings.GROQ_API_KEY}',
-            'Content-Type': 'application/json',
-        },
-        json={
-            'model': settings.GROQ_CHAT_MODEL,
-            'messages': [
-                {'role': 'system', 'content': RELATION_PROMPT},
-                {
-                    'role': 'user',
-                    'content': json.dumps(
-                        {'item': base, 'candidates': candidate_payload},
-                        ensure_ascii=False,
-                    ),
-                },
-            ],
-            'response_format': {'type': 'json_object'},
-            'reasoning_effort': 'low',
-            'temperature': 0.1,
-            'max_completion_tokens': 1200,
-        },
-        timeout=settings.AI_TIMEOUT,
-    )
+    response = post_groq({
+        'model': settings.GROQ_CHAT_MODEL,
+        'messages': [
+            {'role': 'system', 'content': RELATION_PROMPT},
+            {
+                'role': 'user',
+                'content': json.dumps(
+                    {'item': base, 'candidates': candidate_payload},
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+        'response_format': {'type': 'json_object'},
+        'reasoning_effort': 'low',
+        'temperature': 0.1,
+        'max_completion_tokens': 1200,
+    })
 
     if response.status_code >= 400:
         raise RuntimeError(
