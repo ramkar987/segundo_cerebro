@@ -80,7 +80,7 @@ A ideia é reduzir o atrito entre **“vi algo interessante”** e **“isso ent
 ### Relações e conexões
 
 - descoberta automática de relações entre conteúdos;
-- relações sugeridas pela IA;
+- conexões descobertas automaticamente pela IA;
 - tipos como:
   - relacionado;
   - complementa;
@@ -88,9 +88,10 @@ A ideia é reduzir o atrito entre **“vi algo interessante”** e **“isso ent
   - mesmo assunto;
   - continuação;
   - referência;
-- confirmar ou rejeitar sugestões;
-- relações confirmadas podem ser reconsideradas depois;
-- ações de relações confirmadas ficam em menu discreto;
+- conexões encontradas entram automaticamente no mapa;
+- não há etapa manual de confirmação;
+- conexões inadequadas podem ser removidas pelo menu discreto `⋯`;
+- conexões removidas não são sugeridas novamente;
 - tela de Conexões com estatísticas e relações confirmadas.
 
 O **grafo visual interativo** ainda é um próximo passo.
