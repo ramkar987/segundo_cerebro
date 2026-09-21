@@ -435,7 +435,7 @@ def toggle_favorite(request, pk):
 
 
 def _queue_item_retry(item: Item) -> bool:
-    """Coloca um item com erro de volta na fila. Retorna True se enfileirou."""
+    """Retoma o item a partir da etapa que realmente falhou."""
     if item.status != Item.Status.ERROR:
         return False
 
@@ -448,20 +448,36 @@ def _queue_item_retry(item: Item) -> bool:
     if has_active_job:
         return False
 
-    kind = (
-        ProcessingJob.Kind.EXTRACT
-        if item.source_url
-        else ProcessingJob.Kind.ANALYZE
+    last_failed_job = (
+        item.jobs.filter(state=ProcessingJob.State.ERROR)
+        .order_by('-finished_at', '-id')
+        .first()
     )
+
+    if last_failed_job:
+        kind = last_failed_job.kind
+    else:
+        kind = (
+            ProcessingJob.Kind.EXTRACT
+            if item.source_url
+            else ProcessingJob.Kind.ANALYZE
+        )
+
     ProcessingJob.objects.create(item=item, kind=kind)
 
+    if kind == ProcessingJob.Kind.ANALYZE:
+        progress = 70
+        stage = 'Aguardando nova análise da IA'
+    elif kind == ProcessingJob.Kind.RELATE:
+        progress = 92
+        stage = 'Aguardando nova análise de conexões'
+    else:
+        progress = 5
+        stage = 'Na fila para tentar novamente a fonte'
+
     item.status = Item.Status.PROCESSING
-    item.processing_progress = 5 if item.source_url else 70
-    item.processing_stage = (
-        'Na fila para tentar novamente'
-        if item.source_url
-        else 'Aguardando nova análise da IA'
-    )
+    item.processing_progress = progress
+    item.processing_stage = stage
     item.save(
         update_fields=[
             'status',
