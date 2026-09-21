@@ -192,10 +192,10 @@ def _process_analysis_job(job: ProcessingJob) -> None:
         _set_progress(item, 88, 'Análise da IA concluída')
         _finish_job(job)
 
-        if queue_relations(item):
-            _set_progress(item, 92, 'Procurando conteúdos relacionados')
-        else:
-            _complete_item(item)
+        # A captura já está pronta para uso após análise + indexação.
+        # Descoberta de conexões é enriquecimento e roda em segundo plano.
+        _complete_item(item)
+        queue_relations(item)
 
     except AnalysisSkipped as exc:
         _finish_job(job, str(exc))
@@ -208,22 +208,16 @@ def _process_analysis_job(job: ProcessingJob) -> None:
 
 def _process_relation_job(job: ProcessingJob) -> None:
     item = job.item
-    _set_progress(item, 94, 'Comparando com a biblioteca', Item.Status.PROCESSING)
 
     try:
         created = discover_relations(item)
         _finish_job(job, f'{len(created)} conexão(ões) criada(s).')
-        _complete_item(item)
     except RelationDiscoverySkipped as exc:
         _finish_job(job, str(exc))
-        _complete_item(item)
     except Exception as exc:
-        # Relações são enriquecimento; não invalidam o conteúdo já processado.
+        # Relações são enriquecimento em segundo plano.
+        # Falha aqui não altera o estado de uma captura já processada.
         _fail_job(job, exc)
-        _complete_item(
-            item,
-            'Concluído; relações não puderam ser analisadas',
-        )
 
 
 def _process_extract_job(job: ProcessingJob) -> None:
