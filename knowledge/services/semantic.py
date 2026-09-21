@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import re
 import time
@@ -472,15 +473,20 @@ def semantic_search(
 def semantic_item_results(
     query: str,
     item_ids: set[int] | None = None,
-    max_items: int = 100,
+    max_items: int | None = None,
 ) -> list[dict]:
+    candidate_limit = max(
+        settings.LIBRARY_SEMANTIC_CANDIDATES,
+        settings.LIBRARY_SEMANTIC_MAX_RESULTS,
+    )
+
     hits = semantic_search(
         query,
-        top_k=max(settings.SEMANTIC_TOP_K * 3, max_items * 2),
+        top_k=candidate_limit * 2,
         item_ids=item_ids,
     )
 
-    results: list[dict] = []
+    candidates: list[dict] = []
     seen_items: set[int] = set()
 
     for hit in hits:
@@ -488,13 +494,136 @@ def semantic_item_results(
         if item.pk in seen_items:
             continue
         seen_items.add(item.pk)
-        results.append({
+        candidates.append({
             'item': item,
             'score': hit.score,
             'chunk': hit.chunk,
             'excerpt': hit.chunk.text,
         })
-        if len(results) >= max_items:
+        if len(candidates) >= candidate_limit:
             break
 
-    return results
+    reranked = _library_rerank(query, candidates)
+    if max_items is not None:
+        return reranked[:max_items]
+    return reranked
+
+
+
+LIBRARY_RERANK_PROMPT = """Você reranqueia resultados de busca de uma biblioteca pessoal.
+
+A consulta do usuário representa o que ele está procurando.
+Cada candidato tem título e trecho real do acervo.
+
+Classifique cada candidato:
+3 = responde diretamente ou é claramente sobre o que foi procurado;
+2 = útil e relacionado de forma concreta;
+1 = apenas tangencialmente relacionado;
+0 = irrelevante.
+
+Regras:
+- Não premie só por compartilhar palavras genéricas.
+- Não trate "programação", "marketing", "dinheiro", "IA" etc. como relevantes só por pertencerem a um tema amplo.
+- Para consultas como "formas de ganhar dinheiro começando com pouco", um resultado precisa falar concretamente de ganhar dinheiro/renda/monetização ou de começar com poucos recursos.
+- Prefira precisão a quantidade.
+- Retorne somente JSON válido:
+{"results":[{"id":1,"relevance":3},{"id":2,"relevance":0}]}
+"""
+
+
+def _library_rerank(query: str, candidates: list[dict]) -> list[dict]:
+    if not candidates:
+        return []
+
+    if not settings.GROQ_API_KEY:
+        # Sem Groq, usa um corte vetorial conservador.
+        best = candidates[0]['score']
+        floor = max(
+            settings.SEMANTIC_MIN_SCORE,
+            best - settings.LIBRARY_SEMANTIC_RELATIVE_DROP,
+        )
+        return [
+            candidate for candidate in candidates
+            if candidate['score'] >= floor
+        ][:settings.LIBRARY_SEMANTIC_MAX_RESULTS]
+
+    blocks = []
+    for index, candidate in enumerate(candidates, start=1):
+        item = candidate['item']
+        blocks.append(
+            f'CANDIDATO [{index}]\n'
+            f'Título: {item.title or "Sem título"}\n'
+            f'Trecho: {candidate["excerpt"]}'
+        )
+
+    response = requests.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        headers={
+            'Authorization': f'Bearer {settings.GROQ_API_KEY}',
+            'Content-Type': 'application/json',
+        },
+        json={
+            'model': settings.GROQ_CHAT_MODEL,
+            'messages': [
+                {'role': 'system', 'content': LIBRARY_RERANK_PROMPT},
+                {
+                    'role': 'user',
+                    'content': (
+                        f'CONSULTA:\n{query.strip()}\n\n'
+                        'CANDIDATOS:\n\n'
+                        + '\n\n---\n\n'.join(blocks)
+                    ),
+                },
+            ],
+            'response_format': {'type': 'json_object'},
+            'reasoning_effort': 'low',
+            'temperature': 0.0,
+            'max_completion_tokens': 700,
+        },
+        timeout=settings.AI_TIMEOUT,
+    )
+
+    if response.status_code >= 400:
+        # Busca continua funcionando mesmo se o reranking falhar.
+        best = candidates[0]['score']
+        floor = max(
+            settings.SEMANTIC_MIN_SCORE,
+            best - settings.LIBRARY_SEMANTIC_RELATIVE_DROP,
+        )
+        return [
+            candidate for candidate in candidates
+            if candidate['score'] >= floor
+        ][:settings.LIBRARY_SEMANTIC_MAX_RESULTS]
+
+    try:
+        raw = response.json()['choices'][0]['message']['content']
+        payload = json.loads(raw)
+        rows = payload.get('results') or []
+    except Exception:
+        rows = []
+
+    relevance_by_id = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            result_id = int(row.get('id'))
+            relevance = int(row.get('relevance'))
+        except (TypeError, ValueError):
+            continue
+        relevance_by_id[result_id] = max(0, min(relevance, 3))
+
+    reranked = []
+    for index, candidate in enumerate(candidates, start=1):
+        relevance = relevance_by_id.get(index, 0)
+        if relevance < settings.LIBRARY_SEMANTIC_MIN_RELEVANCE:
+            continue
+        enriched = dict(candidate)
+        enriched['relevance'] = relevance
+        reranked.append(enriched)
+
+    reranked.sort(
+        key=lambda item: (item.get('relevance', 0), item['score']),
+        reverse=True,
+    )
+    return reranked[:settings.LIBRARY_SEMANTIC_MAX_RESULTS]
