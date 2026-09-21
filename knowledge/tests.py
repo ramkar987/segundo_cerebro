@@ -265,13 +265,16 @@ class RagTests(TestCase):
     @override_settings(
         GROQ_API_KEY='test-key',
         GROQ_CHAT_MODEL='test-model',
-        RAG_TOP_K=8,
-        RAG_MAX_CHUNKS_PER_ITEM=3,
+        RAG_CANDIDATE_TOP_K=12,
+        RAG_TOP_K=5,
+        RAG_MAX_CHUNKS_PER_ITEM=2,
+        RAG_RELATIVE_SCORE_DROP=0.12,
+        SEMANTIC_MIN_SCORE=0.20,
         AI_TIMEOUT=5,
     )
     @patch('knowledge.services.rag.requests.post')
     @patch('knowledge.services.rag.semantic_search')
-    def test_rag_returns_answer_with_source(
+    def test_rag_returns_only_approved_used_source(
         self,
         mock_search,
         mock_post,
@@ -292,21 +295,92 @@ class RagTests(TestCase):
         )
         mock_search.return_value = [SemanticHit(chunk=chunk, score=0.9)]
 
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {
+        gate_response = Mock()
+        gate_response.status_code = 200
+        gate_response.json.return_value = {
             'choices': [
                 {
                     'message': {
-                        'content': 'Resposta baseada no acervo [1].'
+                        'content': '{"relevant_sources":[1]}'
                     }
                 }
             ]
         }
-        mock_post.return_value = response
+
+        answer_response = Mock()
+        answer_response.status_code = 200
+        answer_response.json.return_value = {
+            'choices': [
+                {
+                    'message': {
+                        'content': (
+                            '{"answer":"Resposta baseada no acervo [1].",'
+                            '"used_sources":[1]}'
+                        )
+                    }
+                }
+            ]
+        }
+
+        mock_post.side_effect = [gate_response, answer_response]
 
         result = answer_from_library('O que eu guardei?')
 
-        self.assertIn('[1]', result['answer'])
+        self.assertEqual(result['answer'], 'Resposta baseada no acervo [1].')
         self.assertEqual(len(result['sources']), 1)
         self.assertEqual(result['sources'][0]['item'].pk, item.pk)
+        self.assertEqual(mock_post.call_count, 2)
+
+    @override_settings(
+        GROQ_API_KEY='test-key',
+        GROQ_CHAT_MODEL='test-model',
+        RAG_CANDIDATE_TOP_K=12,
+        RAG_TOP_K=5,
+        RAG_MAX_CHUNKS_PER_ITEM=2,
+        RAG_RELATIVE_SCORE_DROP=0.12,
+        SEMANTIC_MIN_SCORE=0.20,
+        AI_TIMEOUT=5,
+    )
+    @patch('knowledge.services.rag.requests.post')
+    @patch('knowledge.services.rag.semantic_search')
+    def test_rag_declines_when_gate_rejects_candidates(
+        self,
+        mock_search,
+        mock_post,
+    ):
+        item = Item.objects.create(
+            type=Item.Type.NOTE,
+            title='Programação',
+            content='Aprenda programação.',
+            status=Item.Status.PROCESSED,
+        )
+        ItemSource.objects.create(item=item, platform='manual', metadata={})
+        chunk = Chunk.objects.create(
+            item=item,
+            kind=Chunk.Kind.CONTENT,
+            text='Um site ensina programação.',
+            position=0,
+            embedding=[1.0, 0.0],
+        )
+        mock_search.return_value = [SemanticHit(chunk=chunk, score=0.8)]
+
+        gate_response = Mock()
+        gate_response.status_code = 200
+        gate_response.json.return_value = {
+            'choices': [
+                {
+                    'message': {
+                        'content': '{"relevant_sources":[]}'
+                    }
+                }
+            ]
+        }
+        mock_post.return_value = gate_response
+
+        result = answer_from_library(
+            'Como ganhar dinheiro começando com pouco capital?'
+        )
+
+        self.assertEqual(result['sources'], [])
+        self.assertIn('nenhum trecho responde diretamente', result['answer'])
+        self.assertEqual(mock_post.call_count, 1)
