@@ -688,3 +688,91 @@ class RagProviderFallbackTests(TestCase):
         self.assertIn('Gemini', provider)
         self.assertEqual(mock_groq.call_count, 1)
         self.assertEqual(mock_gemini.call_count, 1)
+
+
+class GeminiModelFallbackTests(TestCase):
+    def _ok(self):
+        resp = Mock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            'candidates': [{'content': {'parts': [{'text': '{"ok":true}'}]}}]
+        }
+        return resp
+
+    def _err(self, status=429):
+        resp = Mock()
+        resp.status_code = status
+        resp.headers = {}
+        resp.text = 'busy'
+        return resp
+
+    @override_settings(
+        GEMINI_API_KEY='k',
+        GEMINI_TEXT_MODEL='modelo-principal',
+        GEMINI_TEXT_FALLBACK_MODEL='modelo-fallback',
+        AI_TIMEOUT=5,
+    )
+    @patch('knowledge.services.rag.requests.post')
+    def test_uses_fallback_model_when_primary_fails(self, mock_post):
+        from .services.rag import _gemini_chat_json
+
+        mock_post.side_effect = [self._err(429), self._ok()]
+
+        data, provider = _gemini_chat_json('s', 'u', max_tokens=50)
+
+        self.assertEqual(data, {'ok': True})
+        self.assertIn('modelo-fallback', provider)
+        self.assertIn('modelo-principal', mock_post.call_args_list[0].args[0])
+        self.assertIn('modelo-fallback', mock_post.call_args_list[1].args[0])
+
+    @override_settings(
+        GEMINI_API_KEY='k',
+        GEMINI_TEXT_MODEL='modelo-principal',
+        GEMINI_TEXT_FALLBACK_MODEL='modelo-fallback',
+        AI_TIMEOUT=5,
+    )
+    @patch('knowledge.services.rag.requests.post')
+    def test_primary_model_is_used_when_healthy(self, mock_post):
+        from .services.rag import _gemini_chat_json
+
+        mock_post.return_value = self._ok()
+
+        _, provider = _gemini_chat_json('s', 'u', max_tokens=50)
+
+        self.assertIn('modelo-principal', provider)
+        self.assertEqual(mock_post.call_count, 1)
+
+    @override_settings(
+        GEMINI_API_KEY='k',
+        GEMINI_TEXT_MODEL='mesmo',
+        GEMINI_TEXT_FALLBACK_MODEL='mesmo',
+        AI_TIMEOUT=5,
+    )
+    @patch('knowledge.services.rag.time.sleep')
+    @patch('knowledge.services.rag.requests.post')
+    def test_duplicate_models_are_collapsed(self, mock_post, _sleep):
+        from .services.rag import RagUnavailable, _gemini_chat_json
+
+        mock_post.return_value = self._err(500)
+
+        with self.assertRaises(RagUnavailable):
+            _gemini_chat_json('s', 'u', max_tokens=50)
+        self.assertEqual(mock_post.call_count, 1)
+
+    @override_settings(
+        GEMINI_API_KEY='k',
+        GEMINI_TEXT_MODEL='a',
+        GEMINI_TEXT_FALLBACK_MODEL='b',
+        AI_TIMEOUT=5,
+    )
+    @patch('knowledge.services.rag.time.sleep')
+    @patch('knowledge.services.rag.requests.post')
+    def test_error_mentions_both_models_when_all_fail(self, mock_post, _sleep):
+        from .services.rag import RagUnavailable, _gemini_chat_json
+
+        mock_post.return_value = self._err(503)
+
+        with self.assertRaises(RagUnavailable) as ctx:
+            _gemini_chat_json('s', 'u', max_tokens=50)
+        self.assertIn('(a)', str(ctx.exception))
+        self.assertIn('(b)', str(ctx.exception))
