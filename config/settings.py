@@ -101,7 +101,13 @@ GEMINI_VISION_MODEL = os.getenv(
 ).strip()
 GEMINI_TEXT_MODEL = os.getenv(
     'GEMINI_TEXT_MODEL',
-    GEMINI_VISION_MODEL,
+    'gemini-3.8-flash',
+).strip()
+# Modelo de contingência: usado automaticamente (com a mesma GEMINI_API_KEY)
+# quando o modelo principal falha (429, 5xx, timeout, resposta inválida).
+GEMINI_TEXT_FALLBACK_MODEL = os.getenv(
+    'GEMINI_TEXT_FALLBACK_MODEL',
+    'gemini-3.5-flash-lite',
 ).strip()
 ANALYZE_IMAGES = os.getenv('ANALYZE_IMAGES', '1') == '1'
 MAX_INSTAGRAM_IMAGES = int(os.getenv('MAX_INSTAGRAM_IMAGES', '20'))
