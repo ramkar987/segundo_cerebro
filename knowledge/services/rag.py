@@ -100,47 +100,62 @@ def _parse_json_object(raw: str, provider: str) -> dict:
     return data
 
 
-def _gemini_chat_json(
+def _gemini_text_models() -> list[str]:
+    """Modelos Gemini de texto, em ordem: principal e depois fallback."""
+    models: list[str] = []
+    for name in (
+        settings.GEMINI_TEXT_MODEL,
+        getattr(settings, 'GEMINI_TEXT_FALLBACK_MODEL', ''),
+    ):
+        name = (name or '').strip()
+        if name and name not in models:
+            models.append(name)
+    return models
+
+
+def _gemini_call_model(
+    model: str,
     system_prompt: str,
     user_content: str,
     max_tokens: int,
-) -> tuple[dict, str]:
-    if not settings.GEMINI_API_KEY:
-        raise RagUnavailable('Gemini não está configurado como fallback.')
-
+    max_attempts: int,
+) -> dict:
     endpoint = (
         'https://generativelanguage.googleapis.com/v1beta/models/'
-        f'{settings.GEMINI_TEXT_MODEL}:generateContent'
+        f'{model}:generateContent'
     )
 
     response = None
-    for attempt in range(2):
-        response = requests.post(
-            endpoint,
-            headers={
-                'x-goog-api-key': settings.GEMINI_API_KEY,
-                'Content-Type': 'application/json',
-            },
-            json={
-                'system_instruction': {
-                    'parts': [{'text': system_prompt}],
+    for attempt in range(max_attempts):
+        try:
+            response = requests.post(
+                endpoint,
+                headers={
+                    'x-goog-api-key': settings.GEMINI_API_KEY,
+                    'Content-Type': 'application/json',
                 },
-                'contents': [
-                    {
-                        'role': 'user',
-                        'parts': [{'text': user_content}],
-                    }
-                ],
-                'generationConfig': {
-                    'temperature': 0.0,
-                    'maxOutputTokens': max_tokens,
-                    'responseMimeType': 'application/json',
+                json={
+                    'system_instruction': {
+                        'parts': [{'text': system_prompt}],
+                    },
+                    'contents': [
+                        {
+                            'role': 'user',
+                            'parts': [{'text': user_content}],
+                        }
+                    ],
+                    'generationConfig': {
+                        'temperature': 0.0,
+                        'maxOutputTokens': max_tokens,
+                        'responseMimeType': 'application/json',
+                    },
                 },
-            },
-            timeout=settings.AI_TIMEOUT,
-        )
+                timeout=settings.AI_TIMEOUT,
+            )
+        except requests.RequestException as exc:
+            raise RagUnavailable(f'Gemini ({model}): {exc}') from exc
 
-        if response.status_code != 429 or attempt >= 1:
+        if response.status_code != 429 or attempt >= max_attempts - 1:
             break
 
         retry_after = response.headers.get('Retry-After')
@@ -154,14 +169,15 @@ def _gemini_chat_json(
         status = response.status_code if response is not None else 'sem resposta'
         detail = response.text[:900] if response is not None else ''
         raise RagUnavailable(
-            f'Gemini retornou HTTP {status}: {detail}'
+            f'Gemini ({model}) retornou HTTP {status}: {detail}'
         )
 
     body = response.json()
     candidates = body.get('candidates') or []
     if not candidates:
         raise RagUnavailable(
-            f'Gemini não retornou candidato: {json.dumps(body)[:800]}'
+            f'Gemini ({model}) não retornou candidato: '
+            f'{json.dumps(body)[:800]}'
         )
 
     parts = candidates[0].get('content', {}).get('parts', [])
@@ -171,10 +187,39 @@ def _gemini_chat_json(
         if isinstance(part, dict)
     ).strip()
 
-    return (
-        _parse_json_object(raw, 'Gemini'),
-        f'Gemini · {settings.GEMINI_TEXT_MODEL}',
-    )
+    return _parse_json_object(raw, f'Gemini ({model})')
+
+
+def _gemini_chat_json(
+    system_prompt: str,
+    user_content: str,
+    max_tokens: int,
+) -> tuple[dict, str]:
+    if not settings.GEMINI_API_KEY:
+        raise RagUnavailable('Gemini não está configurado como fallback.')
+
+    models = _gemini_text_models()
+    if not models:
+        raise RagUnavailable('Nenhum modelo Gemini de texto configurado.')
+
+    errors: list[str] = []
+    for index, model in enumerate(models):
+        is_last = index == len(models) - 1
+        try:
+            data = _gemini_call_model(
+                model,
+                system_prompt,
+                user_content,
+                max_tokens,
+                # Com outro modelo disponível, troca logo em vez de esperar
+                # o retry do mesmo modelo.
+                max_attempts=2 if is_last else 1,
+            )
+            return data, f'Gemini · {model}'
+        except RagUnavailable as exc:
+            errors.append(str(exc))
+
+    raise RagUnavailable(' | '.join(errors))
 
 
 def _chat_json(
